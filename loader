@@ -1,270 +1,110 @@
---[[
-    TONKI — HOOK TEST v3
-    Dùng hookmetamethod (Delta/Scriptware) + fallback.
-    Có self-test để verify hook hoạt động.
-]]
-
+--[[ TONKI — ADMIN BUTTON FINDER v1 ]]
 local CG = game:GetService("CoreGui")
-local SG = game:GetService("StarterGui")
 local LP = game:GetService("Players").LocalPlayer
+local SG = game:GetService("StarterGui")
 
 local Log = {}
-local HookOK = false
-local Capture = false
+local function add(t) table.insert(Log, t); print("[TonKi]", t) end
 
-local function addLog(t)
-    table.insert(Log, t)
-    if #Log > 800 then table.remove(Log, 1) end
-    print("[TonKi]", t)
-end
-
---======================================================================
--- HOOK NAME CALL — thử nhiều API
---======================================================================
-local hooked = false
-
--- Cách 1: hookmetamethod (Delta / Scriptware / Codex)
-pcall(function()
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if Capture and (method == "FireServer" or method == "InvokeServer") then
-            local args = {...}
-            local full = "?"
-            pcall(function() full = self:GetFullName() end)
-            local argStr = ""
-            for _, a in ipairs(args) do
-                argStr = argStr .. typeof(a) .. ":" .. tostring(a):sub(1,25) .. " "
-            end
-            addLog("NC| " .. full .. " | " .. argStr)
-        end
-        return oldNamecall(self, ...)
-    end))
-    hooked = true
-    addLog("[Hook] hookmetamethod OK")
-end)
-
--- Cách 2: fallback setrawmetatable
-if not hooked then
-    pcall(function()
-        local mt = getrawmetatable(game)
-        local oldNC = mt.__namecall
-        setreadonly(mt, false)
-        mt.__namecall = newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            if Capture and (method == "FireServer" or method == "InvokeServer") then
-                local args = {...}
-                local full = "?"
-                pcall(function() full = self:GetFullName() end)
-                local argStr = ""
-                for _, a in ipairs(args) do
-                    argStr = argStr .. typeof(a) .. ":" .. tostring(a):sub(1,25) .. " "
+-- tìm nút admin
+local adminNames = {"sbpuzzle","race","tp","rr","spawnboss","gat","rs","level","exp","awakeall","dfc","df"}
+local found = {}
+local plg = LP:FindFirstChild("PlayerGui")
+if plg then
+    for _, g in ipairs(plg:GetDescendants()) do
+        if g:IsA("TextButton") and g.Name ~= "Claim" then
+            for _, n in ipairs(adminNames) do
+                if g.Name == n or g.Name:lower() == n:lower() then
+                    table.insert(found, g)
+                    break
                 end
-                addLog("NC| " .. full .. " | " .. argStr)
-            end
-            return oldNC(self, ...)
-        end)
-        setreadonly(mt, true)
-        hooked = true
-        addLog("[Hook] setrawmetatable OK")
-    end)
-end
-
-if not hooked then
-    addLog("[Hook] FAILED — executor không hỗ trợ")
-end
-
---======================================================================
--- SELF TEST — verify hook
---======================================================================
-local testRemote = Instance.new("RemoteEvent")
-testRemote.Name = "TonKiTestRemote"
-testRemote.Parent = game:GetService("ReplicatedStorage")
-
---======================================================================
--- GUI
---======================================================================
-local gui = Instance.new("ScreenGui", CG)
-gui.Name = "TonKiHookTest"
-gui.ResetOnSpawn = false
-
-local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0, 340, 0, 420)
-panel.Position = UDim2.new(0, 20, 0.15, 0)
-panel.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-panel.BorderSizePixel = 0
-panel.Active = true
-panel.Draggable = true
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
-local st = Instance.new("UIStroke", panel)
-st.Color = Color3.fromRGB(245, 205, 95); st.Thickness = 1.2
-
-local title = Instance.new("TextLabel", panel)
-title.Size = UDim2.new(1, -20, 0, 26)
-title.Position = UDim2.new(0, 10, 0, 6)
-title.BackgroundTransparency = 1
-title.Text = "◈ HOOK TEST v3"
-title.TextColor3 = Color3.fromRGB(245, 205, 95)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 13
-title.TextXAlignment = Enum.TextXAlignment.Left
-
-local status = Instance.new("TextLabel", panel)
-status.Size = UDim2.new(1, -20, 0, 16)
-status.Position = UDim2.new(0, 10, 0, 26)
-status.BackgroundTransparency = 1
-status.Text = hooked and "Hook: OK" or "Hook: FAILED"
-status.TextColor3 = hooked and Color3.fromRGB(120, 220, 120) or Color3.fromRGB(255, 120, 120)
-status.Font = Enum.Font.GothamBold
-status.TextSize = 11
-status.TextXAlignment = Enum.TextXAlignment.Left
-
-local logBox = Instance.new("ScrollingFrame", panel)
-logBox.Size = UDim2.new(1, -20, 1, -170)
-logBox.Position = UDim2.new(0, 10, 0, 44)
-logBox.BackgroundColor3 = Color3.fromRGB(0,0,0)
-logBox.BorderSizePixel = 0
-logBox.ScrollBarThickness = 4
-logBox.CanvasSize = UDim2.new(0,0,0,0)
-logBox.AutomaticCanvasSize = Enum.AutomaticSize.Y
-
-local lay = Instance.new("UIListLayout", logBox)
-lay.SortOrder = Enum.SortOrder.LayoutOrder
-lay.Padding = UDim.new(0, 2)
-
-local lines = {}
-
-local function mkBtn(text, y, cb, right)
-    local b = Instance.new("TextButton", panel)
-    b.Size = UDim2.new(0.47, 0, 0, 26)
-    b.Position = UDim2.new(right and 0.51 or 0, right and 0 or 10, 1, y)
-    b.BackgroundColor3 = Color3.fromRGB(30, 26, 12)
-    b.Text = text
-    b.TextColor3 = Color3.fromRGB(245, 205, 95)
-    b.Font = Enum.Font.GothamMedium
-    b.TextSize = 10
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
-    b.MouseButton1Click:Connect(function() if cb then pcall(cb) end end)
-    return b
-end
-
-mkBtn("START CAPTURE (10s)", -132, function()
-    Capture = true
-    addLog(">>> CAPTURE ON (10s) — ấn tile puzzle bây giờ")
-    task.delay(10, function()
-        Capture = false
-        addLog(">>> CAPTURE OFF")
-    end)
-end)
-
-mkBtn("STOP", -132, function()
-    Capture = false
-    addLog(">>> STOP")
-end, true)
-
-mkBtn("SELF-TEST", -102, function()
-    addLog("--- SELF-TEST ---")
-    local t0 = #Log
-    Capture = true
-    -- giả lập fire
-    testRemote:FireServer(1, 2)
-    task.wait(0.3)
-    Capture = false
-    if #Log > t0 then
-        addLog(">>> HOOK CHẠY TỐT ✓")
-    else
-        addLog(">>> HOOK KHÔNG BẮT ĐƯỢC ✗")
-    end
-end)
-
-mkBtn("DUMP+COPY", -102, function()
-    local txt = table.concat(lines, "\n")
-    if setclipboard then pcall(function() setclipboard(txt) end) end
-    if writefile then pcall(function() writefile("TonKi_HookLog.txt", txt) end) end
-    addLog("[Dump] " .. #lines .. " lines")
-end, true)
-
-mkBtn("SCAN TILE CLICK CONNECTIONS", -72, function()
-    local plg = LP:FindFirstChild("PlayerGui")
-    local mg = plg and plg:FindFirstChild("MainGui")
-    if not mg then addLog("[Scan] không có MainGui"); return end
-    local cnt = 0
-    for _, g in ipairs(mg:GetDescendants()) do
-        if g:IsA("ImageButton") or g:IsA("TextButton") then
-            local totalConns = 0
-            for _, sig in ipairs({"MouseButton1Click","MouseButton1Down","MouseButton1Up","Activated","InputBegan","InputEnded","TouchTap","TouchLongPress"}) do
-                local ok, conns = pcall(getconnections, g[sig])
-                if ok and conns then totalConns = totalConns + #conns end
-            end
-            if totalConns > 0 then
-                cnt = cnt + 1
-                addLog(("[Btn] %s totalConns=%d"):format(g.Name, totalConns))
             end
         end
     end
-    addLog("[Scan] " .. cnt .. " button có connection")
-end)
+end
+add("[Found] " .. #found .. " admin buttons")
 
-mkBtn("SCAN REMOTE.Skill_Effect LISTENERS", -72, function()
-    local rs = game:GetService("ReplicatedStorage")
-    local ev = rs:FindFirstChild("Chest")
-    ev = ev and ev:FindFirstChild("Remotes")
-    ev = ev and ev:FindFirstChild("Events")
-    ev = ev and ev:FindFirstChild("Skill_Effect")
-    if not ev then addLog("[Scan] không có Skill_Effect"); return end
-    local ok, conns = pcall(getconnections, ev.OnClientEvent)
-    if ok and conns then
-        addLog("[Skill_Effect] OnClientEvent listeners: " .. #conns)
+for _, btn in ipairs(found) do
+    add("── " .. btn:GetFullName())
+    local conns
+    pcall(function() conns = getconnections(btn.MouseButton1Click) end)
+    if conns then
         for i, c in ipairs(conns) do
-            addLog("  [" .. i .. "] " .. tostring(c.Function))
+            add("   conn[" .. i .. "] fn=" .. tostring(c.Function))
+            local fn = c.Function
+            if fn then
+                for j = 1, 20 do
+                    local ok, uv = pcall(getupvalue, fn, j)
+                    if not ok or uv == nil then break end
+                    local ty = typeof(uv)
+                    local txt = tostring(uv)
+                    if (ty == "Instance") then
+                        pcall(function() txt = uv:GetFullName() end)
+                    elseif ty == "table" then
+                        local parts = {}
+                        for k, v in pairs(uv) do
+                            if type(k) == "string" and typeof(v) == "Instance" then
+                                local fn2 = "?"
+                                pcall(function() fn2 = v:GetFullName() end)
+                                table.insert(parts, k .. "=" .. fn2)
+                            end
+                        end
+                        txt = "{" .. table.concat(parts, ",") .. "}"
+                    end
+                    add("      UV[" .. j .. "] " .. ty .. " = " .. txt)
+                end
+            end
         end
     else
-        addLog("[Skill_Effect] không đọc được connections")
+        add("   (không đọc được connections)")
     end
-end, true)
+end
 
-mkBtn("CLEAR", -42, function()
-    lines = {}
-    Log = {}
-    for _, c in ipairs(logBox:GetChildren()) do
-        if c:IsA("TextLabel") then c:Destroy() end
-    end
+-- GUI dump
+local gui = Instance.new("ScreenGui", CG)
+gui.Name = "TonKiAdminFinder"
+gui.ResetOnSpawn = false
+local fr = Instance.new("Frame", gui)
+fr.Size = UDim2.new(1,0,1,0)
+fr.BackgroundColor3 = Color3.fromRGB(8,8,10)
+fr.BorderSizePixel = 0
+local close = Instance.new("TextButton", fr)
+close.Size = UDim2.new(0,100,0,32); close.Position = UDim2.new(1,-110,0,10)
+close.BackgroundColor3 = Color3.fromRGB(180,40,40); close.Text="ĐÓNG"
+close.TextColor3=Color3.new(1,1,1); close.Font=Enum.Font.GothamBold; close.TextSize=14
+close.MouseButton1Click:Connect(function() gui:Destroy() end)
+
+local copy = Instance.new("TextButton", fr)
+copy.Size = UDim2.new(0,120,0,32); copy.Position = UDim2.new(1,-240,0,10)
+copy.BackgroundColor3=Color3.fromRGB(40,140,60); copy.Text="COPY"
+copy.TextColor3=Color3.new(1,1,1); copy.Font=Enum.Font.GothamBold; copy.TextSize=14
+copy.Parent = fr
+
+local sc = Instance.new("ScrollingFrame", fr)
+sc.Size = UDim2.new(1,-20,1,-60); sc.Position = UDim2.new(0,10,0,50)
+sc.BackgroundColor3=Color3.fromRGB(0,0,0); sc.BorderSizePixel=0
+sc.ScrollBarThickness=8; sc.AutomaticCanvasSize=Enum.AutomaticSize.Y
+sc.CanvasSize=UDim2.new(0,0,0,0)
+local lay = Instance.new("UIListLayout", sc)
+lay.SortOrder=Enum.SortOrder.LayoutOrder; lay.Padding=UDim.new(0,2)
+
+local txt = table.concat(Log, "\n")
+for i, l in ipairs(Log) do
+    local lb = Instance.new("TextLabel", sc)
+    lb.Size=UDim2.new(1,-8,0,14); lb.BackgroundTransparency=1
+    lb.Text=l; lb.TextColor3=Color3.fromRGB(210,210,210)
+    lb.Font=Enum.Font.Code; lb.TextSize=10
+    lb.TextXAlignment=Enum.TextXAlignment.Left
+    lb.LayoutOrder=i
+end
+
+copy.MouseButton1Click:Connect(function()
+    if setclipboard then pcall(function() setclipboard(txt) end) end
+    copy.Text="DONE"; task.wait(1); copy.Text="COPY"
 end)
 
-mkBtn("CLOSE", -42, function()
-    pcall(function() testRemote:Destroy() end)
-    gui:Destroy()
-end, true)
+if setclipboard then pcall(function() setclipboard(txt) end) end
+if writefile then pcall(function() writefile("TonKi_AdminDump.txt", txt) end) end
 
--- render log
-spawn(function()
-    local last = 0
-    while gui.Parent do
-        task.wait(0.2)
-        if #Log > last then
-            for i = last + 1, #Log do
-                local l = Instance.new("TextLabel", logBox)
-                l.Size = UDim2.new(1, -6, 0, 14)
-                l.BackgroundTransparency = 1
-                l.Text = Log[i]
-                l.TextColor3 = Color3.fromRGB(210, 210, 210)
-                l.Font = Enum.Font.Code
-                l.TextSize = 9
-                l.TextXAlignment = Enum.TextXAlignment.Left
-                l.TextWrapped = true
-                table.insert(lines, Log[i])
-            end
-            last = #Log
-            logBox.CanvasPosition = Vector2.new(0, 1e6)
-        end
-    end
-end)
-
-pcall(function()
-    SG:SetCore("SendNotification", {
-        Title = "TonKi",
-        Text = "Bấm SELF-TEST trước để check hook."
-    })
-end)
-
-return {log = Log, hooked = hooked}
+pcall(function() SG:SetCore("SendNotification", {Title="TonKi", Text="Đã dump admin buttons. Gửi log mình.", Duration=5}) end)
+return txt
