@@ -1,9 +1,13 @@
 --[[
     ╔══════════════════════════════════════════════════════════╗
     ║                    T O N K I   H U B                     ║
-    ║                 King Legacy  •  v2.3                     ║
-    ║    ToolTip Equip + Frame-Hold + Aim Hook + Haki CD       ║
+    ║                 King Legacy  •  v3.0                     ║
+    ║   ToolTip Equip + Multi-Sea + Safe Spot + Mobile Fix     ║
     ╚══════════════════════════════════════════════════════════╝
+
+    >> ĐỔI ẢNH MENU:
+       Upload ảnh lên Roblox -> Create -> Decal -> lấy Asset ID
+       Rồi sửa BACKGROUND_IMAGE_ID bên dưới thành số ID đó.
 ]]
 
 local BACKGROUND_IMAGE_ID = 0   -- <-- THAY asset id ảnh menu của bạn
@@ -27,11 +31,13 @@ local Cam        = workspace.CurrentCamera
 -- CONFIG
 --======================================================================
 local Config = {
+    -- Farm toggles
     AutoFarmLevel   = false, AutoFarmNear = false, AutoFarmBoss = false,
     AutoScanBoss    = false, AutoMaterial = false,
     AutoSeaEvent    = false, AutoSetSail  = false,
     AutoDungeon     = false, AutoDungeonV2 = false, AutoFish = false,
 
+    -- Farm position
     FarmPosMode     = "Above",
     FarmHeight      = 20,
     OrbitSpeed      = 2,
@@ -39,29 +45,32 @@ local Config = {
     MobDistance     = 500,
     FarmDistance    = 25,
     SkillDistance   = 12,
+    HoldPosition    = true,
 
-    -- Weapon method: Multi-select. Mặc định Sword (an toàn)
+    -- Weapons
     MethodMelee     = false,
     MethodSword     = true,
     MethodFruit     = false,
     WeaponSwapSpeed = 0.6,
-    SelectedSword   = nil,   -- name hoặc tooltip của sword được chọn
+    SelectedSword   = nil,
 
+    -- Skills
     SkillZ = true, SkillX = true, SkillC = true, SkillV = true,
     SkillF = true, SkillB = true, SkillE = true,
     AutoBuso = true, AutoKen = true, AutoAim = true,
 
+    -- Player
     InfJump = false, SpeedHack = false, SpeedValue = 60,
     WalkOnWater = false, CameraLock = false, NoClip = false,
 
+    -- Combat
     HealthPercent = 50, FruitCD = 12,
 
+    -- Misc
     DungeonMode = "Easy", PriorityMode = true,
 
+    -- UI
     MenuSize = "Medium", MenuTransparency = 0.25,
-
-    -- Farm behaviour
-    HoldPosition = true,   -- Nếu off: chỉ aim + click, không đè CFrame
 }
 
 local State = {
@@ -71,9 +80,9 @@ local State = {
     ScannedBosses = {}, ScanTick = 0,
     LastFruitZ = 0, LastSwap = 0, SwapIdx = 1,
     OrbitAngle = 0, InRaid = false,
-    HakiLastFire = 0, HakiBusy = false,
+    HakiLastFire = 0, HakiBusy = false, KenLastFire = 0,
     AppliedPos = nil, DesiredCFrame = nil,
-    LastEquipTry = 0,
+    LastRepeatCheck = 0,
 }
 
 --======================================================================
@@ -118,12 +127,10 @@ local function IsPlayer(obj)
     end
     return false
 end
-local function parseLv(name)
-    return tonumber(name:match("Lv%.%s*(%d+)"))
-end
+local function parseLv(name) return tonumber(name:match("Lv%.%s*(%d+)")) end
 
 --======================================================================
--- SEA DETECTION
+-- SEA + QUEST
 --======================================================================
 local function GetSea()
     local pid = game.PlaceId
@@ -342,7 +349,7 @@ local function ScanBosses()
 end
 
 --======================================================================
--- TOOL EQUIP — dùng cả Name và ToolTip như code gốc
+-- TOOL EQUIP (Name + ToolTip)
 --======================================================================
 local function FindToolAnywhere(name)
     if not name then return nil end
@@ -360,21 +367,14 @@ local function FindToolAnywhere(name)
     end
     return nil
 end
+local function ToolExists(name) return FindToolAnywhere(name) ~= nil end
 
-local function ToolExists(name)
-    return FindToolAnywhere(name) ~= nil
-end
-
--- Equip theo name hoặc tooltip
 local function EquipByName(name)
     if not name then return false end
     local c = Char()
     if not c then return false end
-    -- Đang cầm rồi?
     for _, t in ipairs(c:GetChildren()) do
-        if t:IsA("Tool") and (t.Name == name or t.ToolTip == name) then
-            return true
-        end
+        if t:IsA("Tool") and (t.Name == name or t.ToolTip == name) then return true end
     end
     local tool = FindToolAnywhere(name)
     if tool then
@@ -384,16 +384,6 @@ local function EquipByName(name)
     return false
 end
 
-local function CurrentTool()
-    local c = Char()
-    for _, t in ipairs(c:GetChildren()) do
-        if t:IsA("Tool") then return t end
-    end
-end
-
---======================================================================
--- CLICK / SKILLS — giống code gốc: duyệt TẤT CẢ tool đang cầm, invoke cả FS/SW/DF
---======================================================================
 local function ClickMob()
     local c = Char()
     if not c then return end
@@ -423,29 +413,18 @@ local function UseSkills()
     if Config.SkillE then Key("E") end
 end
 
--- Build list vũ khí cần cycle
 local function BuildWeaponList()
     local list = {}
-    if Config.MethodMelee then
-        if ToolExists("Combat") then table.insert(list, "Combat") end
+    if Config.MethodMelee and ToolExists("Combat") then table.insert(list, "Combat") end
+    if Config.MethodFruit and ToolExists("Fruit Power") then table.insert(list, "Fruit Power") end
+    if Config.MethodSword and Config.SelectedSword and ToolExists(Config.SelectedSword) then
+        table.insert(list, Config.SelectedSword)
     end
-    if Config.MethodFruit then
-        if ToolExists("Fruit Power") then table.insert(list, "Fruit Power") end
-    end
-    if Config.MethodSword then
-        if Config.SelectedSword and ToolExists(Config.SelectedSword) then
-            table.insert(list, Config.SelectedSword)
-        end
-    end
-    -- fallback: nếu rỗng và có MethodSword bật → dùng bất kỳ tool trong backpack
     if #list == 0 and Config.MethodSword then
         local bp = LP:FindFirstChildOfClass("Backpack")
         if bp then
             for _, t in ipairs(bp:GetChildren()) do
-                if t:IsA("Tool") then
-                    table.insert(list, t.Name)
-                    break
-                end
+                if t:IsA("Tool") then table.insert(list, t.Name); break end
             end
         end
     end
@@ -462,14 +441,37 @@ local function RotateWeapon(force)
 end
 
 --======================================================================
--- POSITION — giữ CFrame mỗi frame (giống code gốc) — KHÔNG PlatformStand
+-- POSITION HOLDERS
 --======================================================================
-local function SetDesiredCFrame(cf)
-    State.DesiredCFrame = cf
+local function AnyFarmActive()
+    return Config.AutoFarmLevel or Config.AutoFarmNear or Config.AutoFarmBoss
+        or Config.AutoMaterial or Config.AutoSeaEvent
+        or Config.AutoDungeon or Config.AutoDungeonV2
 end
-local function ClearDesired()
-    State.DesiredCFrame = nil
+
+local function EnsureVelocityHolder()
+    local hrp = HRP()
+    if not hrp then return end
+    local bv = hrp:FindFirstChild("TonKiHolder")
+    if not bv then
+        bv = Instance.new("BodyVelocity")
+        bv.Name = "TonKiHolder"
+        bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        bv.P = 3000
+        bv.Velocity = Vector3.zero
+        bv.Parent = hrp
+    else
+        bv.Velocity = Vector3.zero
+    end
 end
+
+local function RemoveVelocityHolder()
+    local hrp = HRP()
+    if not hrp then return end
+    local bv = hrp:FindFirstChild("TonKiHolder")
+    if bv then bv:Destroy() end
+end
+
 local function ComputeFarmCFrame(mobPos)
     local mode = Config.FarmPosMode
     if mode == "Above" then
@@ -484,18 +486,57 @@ local function ComputeFarmCFrame(mobPos)
         return CFrame.lookAt(mobPos + Vector3.new(0, 3, 0), mobPos)
     end
 end
-local function AnyFarmActive()
-    return Config.AutoFarmLevel or Config.AutoFarmNear or Config.AutoFarmBoss
-        or Config.AutoMaterial or Config.AutoSeaEvent
-        or Config.AutoDungeon or Config.AutoDungeonV2
+
+local function ComputeSafeSpot()
+    local q = FindQuest()
+    if q then return CFrame.new(q[5], q[6] + 30, q[7]) end
+    local hrp = HRP()
+    if hrp then return hrp.CFrame + Vector3.new(0, 50, 0) end
+    return nil
 end
 
 --======================================================================
--- HAKI — cooldown 3s, tránh spam
+-- MOBILE CONTROLS FIX
+--======================================================================
+local function RestoreControls()
+    pcall(function() SG:SetCoreGuiEnabled(Enum.CoreGuiType.All, true) end)
+    pcall(function()
+        local pg = LP:FindFirstChild("PlayerGui")
+        if pg then
+            local touch = pg:FindFirstChild("TouchGui")
+            if touch and touch:IsA("ScreenGui") then touch.Enabled = true end
+        end
+    end)
+    pcall(function()
+        local ps = LP:FindFirstChild("PlayerScripts")
+        if ps then
+            local pm = ps:FindFirstChild("PlayerModule")
+            if pm then
+                local ctl = require(pm):GetControls()
+                if ctl then ctl:Enable() end
+            end
+        end
+    end)
+    pcall(function()
+        local h = Hum()
+        if h then
+            h.PlatformStand = false
+            h.AutoRotate = true
+            local st = h:GetState()
+            if st == Enum.HumanoidStateType.Physics
+            or st == Enum.HumanoidStateType.PlatformStanding
+            or st == Enum.HumanoidStateType.FallingDown then
+                h:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
+    end)
+end
+
+--======================================================================
+-- HAKI (cooldown 3s)
 --======================================================================
 local function UseBuso()
-    if tick() - State.HakiLastFire < 3 then return end
-    if State.HakiBusy then return end
+    if tick() - State.HakiLastFire < 3 or State.HakiBusy then return end
     State.HakiBusy = true
     pcall(function()
         local pchar = workspace:FindFirstChild("PlayerCharacters")
@@ -514,7 +555,7 @@ local function UseBuso()
     State.HakiBusy = false
 end
 local function UseKen()
-    if tick() - (State.KenLastFire or 0) < 3 then return end
+    if tick() - State.KenLastFire < 3 then return end
     pcall(function()
         local svc = workspace.PlayerCharacters[LP.Name].Services
         if svc.KenOpen.Value == false then
@@ -522,6 +563,33 @@ local function UseKen()
             State.KenLastFire = tick()
         end
     end)
+end
+
+--======================================================================
+-- REPEAT QUEST AUTO-CONFIRM
+--======================================================================
+local function AutoConfirmRepeatQuest()
+    if tick() - State.LastRepeatCheck < 0.5 then return end
+    State.LastRepeatCheck = tick()
+    local plg = LP:FindFirstChild("PlayerGui")
+    if not plg then return end
+    for _, g in ipairs(plg:GetDescendants()) do
+        if g:IsA("TextLabel") and g.Text:find("Repeat Quest") then
+            local root = g
+            for _ = 1, 4 do if root.Parent then root = root.Parent end end
+            for _, btn in ipairs(root:GetDescendants()) do
+                if btn:IsA("TextButton") and (btn.Text == "Yes" or btn.Text:lower() == "yes") then
+                    for _, sig in ipairs({"MouseButton1Up","MouseButton1Down","MouseButton1Click","Activated"}) do
+                        local ok, conns = pcall(getconnections, btn[sig])
+                        if ok then
+                            for _, c in ipairs(conns) do pcall(function() c:Fire() end) end
+                        end
+                    end
+                    return
+                end
+            end
+        end
+    end
 end
 
 --======================================================================
@@ -555,7 +623,7 @@ local function TryEnterDungeon()
 end
 
 --======================================================================
--- AIMBOT HOOK — override MouseHit như code gốc
+-- AIMBOT HOOK
 --======================================================================
 pcall(function()
     local mt = getrawmetatable(game)
@@ -563,9 +631,8 @@ pcall(function()
     setreadonly(mt, false)
     mt.__namecall = newcclosure(function(self, ...)
         local args = {...}
-        local method = getnamecallmethod()
-        if method == "InvokeServer" and tostring(self) == "SkillAction" then
-            if (State.AimPosRaw and (Config.AutoAim or AnyFarmActive())) then
+        if getnamecallmethod() == "InvokeServer" and tostring(self) == "SkillAction" then
+            if State.AimPosRaw and (Config.AutoAim or AnyFarmActive()) then
                 if typeof(args[2]) == "table" and args[2].Type == "Up" then
                     args[2].MouseHit = State.AimPos or args[2].MouseHit
                 end
@@ -577,7 +644,7 @@ pcall(function()
 end)
 
 --======================================================================
--- UI — compact (giống v2.2)
+-- UI (compact)
 --======================================================================
 local function New(class, props, parent)
     local i = Instance.new(class)
@@ -645,18 +712,14 @@ local Header = New("Frame", {
     BorderSizePixel = 0, ZIndex = 5,
 })
 Corner(Header, 10)
-New("TextLabel", {
-    Parent = Header, Size = UDim2.new(0.7,0,1,0), Position = UDim2.new(0,12,0,0),
+New("TextLabel", {Parent = Header, Size = UDim2.new(0.7,0,1,0), Position = UDim2.new(0,12,0,0),
     BackgroundTransparency = 1, Text = "◈ TONKI HUB",
     TextColor3 = Color3.fromRGB(245,205,95), Font = Enum.Font.GothamBold,
-    TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
-})
-local CloseBtn = New("TextButton", {
-    Parent = Header, Size = UDim2.new(0,26,0,26), Position = UDim2.new(1,-32,0,4),
+    TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6})
+local CloseBtn = New("TextButton", {Parent = Header, Size = UDim2.new(0,26,0,26), Position = UDim2.new(1,-32,0,4),
     BackgroundColor3 = Color3.fromRGB(45,22,22), Text = "✕",
     TextColor3 = Color3.fromRGB(255,130,130), Font = Enum.Font.GothamBold,
-    TextSize = 14, AutoButtonColor = false, ZIndex = 6,
-})
+    TextSize = 14, AutoButtonColor = false, ZIndex = 6})
 Corner(CloseBtn, 6)
 CloseBtn.MouseButton1Click:Connect(function() Main.Visible = false end)
 
@@ -697,10 +760,8 @@ local function MakeTab(name, icon)
         CanvasSize = UDim2.new(0,0,0,0), Visible = false,
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
     })
-    New("UIListLayout", {Parent = page, Padding = UDim.new(0,4),
-        SortOrder = Enum.SortOrder.LayoutOrder})
-    New("UIPadding", {Parent = page,
-        PaddingTop = UDim.new(0,4), PaddingBottom = UDim.new(0,10),
+    New("UIListLayout", {Parent = page, Padding = UDim.new(0,4), SortOrder = Enum.SortOrder.LayoutOrder})
+    New("UIPadding", {Parent = page, PaddingTop = UDim.new(0,4), PaddingBottom = UDim.new(0,10),
         PaddingLeft = UDim.new(0,2), PaddingRight = UDim.new(0,2)})
     Pages[name] = page
     TabBtns[name] = btn
@@ -731,10 +792,8 @@ local function Toggle(parent, label, key, cb)
     })
     Corner(row, 5)
     New("TextLabel", {Parent = row, Size = UDim2.new(0.7,0,1,0), Position = UDim2.new(0,10,0,0),
-        BackgroundTransparency = 1, Text = label,
-        TextColor3 = Color3.fromRGB(220,220,230),
-        Font = Enum.Font.Gotham, TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left})
+        BackgroundTransparency = 1, Text = label, TextColor3 = Color3.fromRGB(220,220,230),
+        Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left})
     local on = Config[key] == true
     local track = New("Frame", {Parent = row, Size = UDim2.new(0,32,0,16),
         Position = UDim2.new(1,-40,0.5,-8),
@@ -761,17 +820,14 @@ local function SliderInput(parent, label, key, min, max, decimals)
         BorderSizePixel = 0})
     Corner(row, 5)
     New("TextLabel", {Parent = row, Size = UDim2.new(0.6,0,0,16), Position = UDim2.new(0,10,0,3),
-        BackgroundTransparency = 1, Text = label,
-        TextColor3 = Color3.fromRGB(220,220,230),
-        Font = Enum.Font.Gotham, TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left})
+        BackgroundTransparency = 1, Text = label, TextColor3 = Color3.fromRGB(220,220,230),
+        Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left})
     local box = New("TextBox", {Parent = row, Size = UDim2.new(0,58,0,18),
         Position = UDim2.new(1,-66,0,2),
         BackgroundColor3 = Color3.fromRGB(12,12,16),
         Text = tostring(Config[key]),
         TextColor3 = Color3.fromRGB(245,205,95),
-        Font = Enum.Font.GothamBold, TextSize = 11,
-        ClearTextOnFocus = false})
+        Font = Enum.Font.GothamBold, TextSize = 11, ClearTextOnFocus = false})
     Corner(box, 4)
     Stroke(box, Color3.fromRGB(60,60,70), 1)
     local bar = New("Frame", {Parent = row, Size = UDim2.new(1,-20,0,6),
@@ -802,9 +858,7 @@ local function SliderInput(parent, label, key, min, max, decimals)
     end
     bar.InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1
-        or i.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; UfromX(i.Position.X)
-        end
+        or i.UserInputType == Enum.UserInputType.Touch then dragging = true; UfromX(i.Position.X) end
     end)
     UIS.InputChanged:Connect(function(i)
         if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
@@ -843,10 +897,8 @@ local function Cycler(parent, label, key, list)
         Text = "", AutoButtonColor = false})
     Corner(row, 5)
     New("TextLabel", {Parent = row, Size = UDim2.new(0.5,0,1,0), Position = UDim2.new(0,10,0,0),
-        BackgroundTransparency = 1, Text = label,
-        TextColor3 = Color3.fromRGB(220,220,230),
-        Font = Enum.Font.Gotham, TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left})
+        BackgroundTransparency = 1, Text = label, TextColor3 = Color3.fromRGB(220,220,230),
+        Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left})
     local valLbl = New("TextLabel", {Parent = row, Size = UDim2.new(0.45,0,1,0), Position = UDim2.new(0.53,0,0,0),
         BackgroundTransparency = 1, Text = tostring(Config[key]),
         TextColor3 = Color3.fromRGB(245,205,95),
@@ -870,15 +922,14 @@ local TabDungeon  = MakeTab("Dung",  "◈")
 local TabPlayer   = MakeTab("Play",  "☺")
 local TabMisc     = MakeTab("Misc",  "✦")
 
+-- Settings
 Section(TabSettings, "Kích thước menu")
-Button(TabSettings, "Mini",   function() Config.MenuSize="Mini"; ApplySize("Mini"); Save() end)
-Button(TabSettings, "Medium", function() Config.MenuSize="Medium"; ApplySize("Medium"); Save() end)
-Button(TabSettings, "Maximum",function() Config.MenuSize="Maximum"; ApplySize("Maximum"); Save() end)
-
+Button(TabSettings, "Mini",    function() Config.MenuSize="Mini";    ApplySize("Mini");    Save() end)
+Button(TabSettings, "Medium",  function() Config.MenuSize="Medium";  ApplySize("Medium");  Save() end)
+Button(TabSettings, "Maximum", function() Config.MenuSize="Maximum"; ApplySize("Maximum"); Save() end)
 Section(TabSettings, "Độ trong suốt")
 SliderInput(TabSettings, "Transparency", "MenuTransparency", 0, 0.85, 2)
 Button(TabSettings, "Apply", function() ApplyTransparency() end)
-
 Section(TabSettings, "Sea hiện tại")
 Label(TabSettings, "Sea " .. GetSea() .. " | PlaceId: " .. game.PlaceId)
 
@@ -926,8 +977,8 @@ end)
 Button(TabBoss, "Teleport Boss Gần Nhất", function()
     local b = ScanBosses()
     if #b > 0 then
-        SetDesiredCFrame(ComputeFarmCFrame(b[1].hrp.Position))
-        task.wait(0.5); ClearDesired()
+        State.DesiredCFrame = ComputeFarmCFrame(b[1].hrp.Position)
+        task.wait(0.5); State.DesiredCFrame = nil
         notif("TonKi Hub", "Đã tele tới: " .. b[1].name)
     else notif("TonKi Hub", "Không có boss") end
 end)
@@ -941,14 +992,12 @@ SliderInput(TabFarm, "Orbit Radius", "OrbitRadius", 3, 60, 0)
 SliderInput(TabFarm, "Orbit Speed", "OrbitSpeed", 0.5, 15, 1)
 SliderInput(TabFarm, "Farm Distance", "FarmDistance", 5, 100, 0)
 SliderInput(TabFarm, "Mob Scan Distance", "MobDistance", 100, 2000, 0)
-Toggle(TabFarm, "Hold Position (ghim vị trí)", "HoldPosition")
-
-Section(TabFarm, "Weapon Methods (chọn song song)")
+Toggle(TabFarm, "Hold Position", "HoldPosition")
+Section(TabFarm, "Weapon Methods")
 Toggle(TabFarm, "Melee (Combat)", "MethodMelee")
 Toggle(TabFarm, "Sword", "MethodSword")
 Toggle(TabFarm, "Fruit", "MethodFruit")
 SliderInput(TabFarm, "Tốc độ đổi vũ khí (s)", "WeaponSwapSpeed", 0.1, 3, 1)
-
 Section(TabFarm, "Sword Selection")
 local swordLbl = Label(TabFarm, "Selected: " .. tostring(Config.SelectedSword or "None"))
 Button(TabFarm, "Refresh Sword List (đổi sword)", function()
@@ -957,8 +1006,7 @@ Button(TabFarm, "Refresh Sword List (đổi sword)", function()
         if not c then return end
         for _, t in ipairs(c:GetChildren()) do
             if t:IsA("Tool") and not seen[t.Name] then
-                seen[t.Name] = true
-                table.insert(list, t.Name)
+                seen[t.Name] = true; table.insert(list, t.Name)
             end
         end
     end
@@ -987,7 +1035,8 @@ Toggle(TabDungeon, "Auto Dungeon V2", "AutoDungeonV2")
 Section(TabDungeon, "Action")
 Button(TabDungeon, "TP Dungeon Entrance", function()
     local c = DungeonEntrance()
-    if c then SetDesiredCFrame(c); task.wait(0.4); ClearDesired(); notif("TonKi Hub", "Đã TP entrance") end
+    if c then State.DesiredCFrame = c; task.wait(0.4); State.DesiredCFrame = nil
+        notif("TonKi Hub", "Đã TP entrance") end
 end)
 Button(TabDungeon, "Enter Dungeon", function() TryEnterDungeon() end)
 
@@ -1012,8 +1061,8 @@ Button(TabPlayer, "Rejoin", function() pcall(function() TPS:Teleport(game.PlaceI
 
 -- Misc
 Section(TabMisc, "Info")
-Label(TabMisc, "TonKi Hub v2.3")
-Label(TabMisc, "Multi-Sea + ToolTip equip + Aim hook")
+Label(TabMisc, "TonKi Hub v3.0")
+Label(TabMisc, "Multi-Sea + Safe Spot + Mobile Fix")
 Section(TabMisc, "Danger")
 Button(TabMisc, "Reset config", function()
     pcall(function() delfile(SAVE) end); notif("TonKi Hub", "Đã xoá config")
@@ -1027,7 +1076,7 @@ end
 ApplySize(Config.MenuSize)
 ApplyTransparency()
 
--- Toggle btn
+-- Toggle button drag/click
 local dragT, dStart, sPos
 ToggleBtn.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1
@@ -1057,19 +1106,33 @@ end)
 -- ============== CORE LOOPS ==============
 --======================================================================
 
--- Position holder — chạy mỗi frame, giống code gốc
-RunService.Stepped:Connect(function()
-    if Config.HoldPosition and State.DesiredCFrame and AnyFarmActive() then
-        local hrp = HRP()
-        if hrp then
-            pcall(function()
-                hrp.CFrame = State.DesiredCFrame
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                hrp.Velocity = Vector3.zero
-            end)
-        end
+-- Position holder — mượt, không ẩn controls
+RunService.Heartbeat:Connect(function()
+    if not (Config.HoldPosition and State.DesiredCFrame and AnyFarmActive()) then
+        RemoveVelocityHolder()
+        return
+    end
+    local hrp = HRP()
+    if not hrp then return end
+    local dist = (hrp.Position - State.DesiredCFrame.Position).Magnitude
+    if dist > 8 then
+        pcall(function()
+            hrp.CFrame = State.DesiredCFrame
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.Velocity = Vector3.zero
+        end)
+    else
+        EnsureVelocityHolder()
     end
 end)
+
+-- Restore mobile controls
+spawn(function()
+    while task.wait(1) do
+        if AnyFarmActive() then RestoreControls() end
+    end
+end)
+LP.CharacterAdded:Connect(function() task.wait(1); RestoreControls() end)
 
 -- Haki
 spawn(function()
@@ -1106,14 +1169,12 @@ RunService.RenderStepped:Connect(function()
     if Config.CameraLock and State.AppliedPos then Cam.CFrame = State.AppliedPos end
 end)
 
--- Scan ticker + orbit
+-- Orbit angle + scan + clear cframe khi idle
 RunService.Stepped:Connect(function(_, dt)
     if Config.FarmPosMode == "Behind" then
         State.OrbitAngle = (State.OrbitAngle + Config.OrbitSpeed * 60 * dt) % 360
     end
-    if not AnyFarmActive() then
-        State.DesiredCFrame = nil
-    end
+    if not AnyFarmActive() then State.DesiredCFrame = nil end
     State.ScanTick = State.ScanTick + 1
     if State.ScanTick >= 20 then
         State.ScanTick = 0
@@ -1127,21 +1188,22 @@ RunService.Stepped:Connect(function(_, dt)
     end
 end)
 
--- NoClip
+-- NoClip (không dùng ChangeState)
 RunService.Stepped:Connect(function()
     if Config.NoClip then
         local c = Char()
-        pcall(function()
-            c.Humanoid:ChangeState(11)
-            for _, p in ipairs(c:GetDescendants()) do
-                if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
-            end
-        end)
+        if c then
+            pcall(function()
+                for _, p in ipairs(c:GetDescendants()) do
+                    if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
+                end
+            end)
+        end
     end
 end)
 
 --======================================================================
--- AUTO FARM LEVEL
+-- QUEST CONFIRM
 --======================================================================
 local function QuestConfirmed(name)
     local plg = LP:FindFirstChild("PlayerGui")
@@ -1152,10 +1214,15 @@ local function QuestConfirmed(name)
     return false
 end
 
+--======================================================================
+-- AUTO FARM LEVEL (safe spot + repeat quest)
+--======================================================================
 spawn(function()
     while task.wait(0.3) do
         pcall(function()
             if not Config.AutoFarmLevel then State.QuestTaken = false; return end
+            AutoConfirmRepeatQuest()
+
             local q, sea = FindQuest()
             if not q then return end
             State.QuestInfo = q
@@ -1166,42 +1233,45 @@ spawn(function()
                 TakeQuest(questName); task.wait(0.5)
                 if not QuestConfirmed(questName) then
                     statusLbl.Text = "Đang chờ nhận quest..."
+                    State.DesiredCFrame = CFrame.new(qx, qy + 30, qz)
                     return
                 end
                 State.QuestTaken = true
             end
 
-            if Dist(Vector3.new(qx, qy, qz)) > 500 then
-                SetDesiredCFrame(CFrame.new(qx, qy, qz))
-                task.wait(0.5)
-            end
-
             local mobs = ScanMobs(mobLv)
+
             if #mobs > 0 then
                 local m = mobs[1]
                 State.TargetMob = m
                 State.AimPos = m.hrp.CFrame
                 State.AimPosRaw = m.hrp.Position
-                SetDesiredCFrame(ComputeFarmCFrame(m.hrp.Position))
-
-                RotateWeapon()  -- equip vũ khí
-                task.wait(0.05)
+                State.DesiredCFrame = ComputeFarmCFrame(m.hrp.Position)
+                RotateWeapon()
+                task.wait(0.03)
                 if Dist(m.hrp.Position) <= Config.SkillDistance + 40 then
-                    ClickMob()  -- click đánh
-                    UseSkills()
+                    ClickMob(); UseSkills()
                     local h = Hum()
                     if h and h.Health < h.MaxHealth * Config.HealthPercent/100 then Key("R") end
                 end
                 statusLbl.Text = "Target: " .. m.name
-                statLbl.Text = "Sea " .. sea .. " | lv " .. mobLv
+                statLbl.Text = "Sea " .. sea .. " | farming lv " .. mobLv
             else
-                statusLbl.Text = "Tìm quái lv " .. mobLv .. " (Sea " .. sea .. ")"
+                -- Không có mob → về safe spot, giữ yên
+                State.AimPos = nil
+                State.AimPosRaw = nil
+                State.TargetMob = nil
+                State.DesiredCFrame = CFrame.new(qx, qy + 30, qz)
+                statusLbl.Text = "Safe Spot — chờ spawn (lv " .. mobLv .. ")"
+                statLbl.Text = "Sea " .. sea .. " | idle"
             end
         end)
     end
 end)
 
+--======================================================================
 -- AUTO FARM NEAR
+--======================================================================
 spawn(function()
     while task.wait(0.25) do
         pcall(function()
@@ -1214,51 +1284,74 @@ spawn(function()
                 State.TargetMob = target
                 State.AimPos = target.hrp.CFrame
                 State.AimPosRaw = target.hrp.Position
-                SetDesiredCFrame(ComputeFarmCFrame(target.hrp.Position))
+                State.DesiredCFrame = ComputeFarmCFrame(target.hrp.Position)
                 RotateWeapon()
                 task.wait(0.03)
                 if Dist(target.hrp.Position) <= Config.SkillDistance + 40 then
                     ClickMob(); UseSkills()
                 end
                 statLbl.Text = "Near: " .. target.name
+            else
+                State.AimPos = nil
+                State.AimPosRaw = nil
+                State.TargetMob = nil
+                -- Không set DesiredCFrame → không giật
+                statLbl.Text = "Near: idle"
             end
         end)
     end
 end)
 
--- AUTO FARM BOSS
+--======================================================================
+-- AUTO FARM BOSS (safe spot)
+--======================================================================
 spawn(function()
     while task.wait(0.3) do
         pcall(function()
             if not Config.AutoFarmBoss then return end
+            AutoConfirmRepeatQuest()
+
             local bosses = ScanBosses()
-            if #bosses == 0 then return end
-            local b = bosses[1]
-            State.TargetMob = b
-            State.AimPos = b.hrp.CFrame
-            State.AimPosRaw = b.hrp.Position
-            SetDesiredCFrame(ComputeFarmCFrame(b.hrp.Position))
-            RotateWeapon()
-            task.wait(0.03)
-            if Dist(b.hrp.Position) <= Config.SkillDistance + 40 then
-                ClickMob(); UseSkills()
+            if #bosses > 0 then
+                local b = bosses[1]
+                State.TargetMob = b
+                State.AimPos = b.hrp.CFrame
+                State.AimPosRaw = b.hrp.Position
+                State.DesiredCFrame = ComputeFarmCFrame(b.hrp.Position)
+                RotateWeapon()
+                task.wait(0.03)
+                if Dist(b.hrp.Position) <= Config.SkillDistance + 40 then
+                    ClickMob(); UseSkills()
+                end
+                statLbl.Text = "Boss: " .. b.name
+            else
+                State.AimPos = nil
+                State.AimPosRaw = nil
+                State.TargetMob = nil
+                local safe = ComputeSafeSpot()
+                if safe then State.DesiredCFrame = safe end
+                statLbl.Text = "Boss: chờ spawn..."
             end
-            statLbl.Text = "Boss: " .. b.name
         end)
     end
 end)
 
+--======================================================================
 -- AUTO MATERIAL
+--======================================================================
 spawn(function()
     while task.wait(0.4) do
         pcall(function()
             if not Config.AutoMaterial then return end
             local mobs = ScanMobs()
-            if #mobs == 0 then return end
+            if #mobs == 0 then
+                State.AimPos = nil; State.AimPosRaw = nil
+                return
+            end
             local m = mobs[1]
             State.AimPos = m.hrp.CFrame
             State.AimPosRaw = m.hrp.Position
-            SetDesiredCFrame(ComputeFarmCFrame(m.hrp.Position))
+            State.DesiredCFrame = ComputeFarmCFrame(m.hrp.Position)
             RotateWeapon()
             task.wait(0.03)
             if Dist(m.hrp.Position) <= Config.SkillDistance + 40 then
@@ -1268,7 +1361,9 @@ spawn(function()
     end
 end)
 
+--======================================================================
 -- AUTO SEA EVENT
+--======================================================================
 spawn(function()
     while task.wait(0.8) do
         pcall(function()
@@ -1281,7 +1376,7 @@ spawn(function()
                         if h and h.Health > 0 then
                             State.AimPos = mon.HumanoidRootPart.CFrame
                             State.AimPosRaw = mon.HumanoidRootPart.Position
-                            SetDesiredCFrame(ComputeFarmCFrame(mon.HumanoidRootPart.Position))
+                            State.DesiredCFrame = ComputeFarmCFrame(mon.HumanoidRootPart.Position)
                             RotateWeapon()
                             task.wait(0.03)
                             ClickMob(); UseSkills()
@@ -1297,7 +1392,7 @@ spawn(function()
                         if t:FindFirstChild("HumanoidRootPart") then
                             State.AimPos = t.HumanoidRootPart.CFrame
                             State.AimPosRaw = t.HumanoidRootPart.Position
-                            SetDesiredCFrame(ComputeFarmCFrame(t.HumanoidRootPart.Position))
+                            State.DesiredCFrame = ComputeFarmCFrame(t.HumanoidRootPart.Position)
                             RotateWeapon(); task.wait(0.03)
                             ClickMob(); UseSkills()
                         end
@@ -1310,7 +1405,9 @@ end)
 
 spawn(function() while task.wait(2) do if Config.AutoSetSail then end end end)
 
+--======================================================================
 -- AUTO DUNGEON V1
+--======================================================================
 spawn(function()
     while task.wait(0.4) do
         pcall(function()
@@ -1319,7 +1416,7 @@ spawn(function()
             if not (plg and plg:FindFirstChild("DungeonUI")) then
                 State.InRaid = false
                 local ent = DungeonEntrance()
-                if ent and Dist(ent.Position) > 30 then SetDesiredCFrame(ent)
+                if ent and Dist(ent.Position) > 30 then State.DesiredCFrame = ent
                 else TryEnterDungeon() end
                 statLbl.Text = "Dungeon: chờ vào raid..."
                 return
@@ -1341,7 +1438,7 @@ spawn(function()
             if nearest then
                 local hrp = nearest.HumanoidRootPart
                 State.AimPos = hrp.CFrame; State.AimPosRaw = hrp.Position
-                SetDesiredCFrame(ComputeFarmCFrame(hrp.Position))
+                State.DesiredCFrame = ComputeFarmCFrame(hrp.Position)
                 RotateWeapon(); task.wait(0.03)
                 if Dist(hrp.Position) < 150 then ClickMob(); UseSkills() end
                 statLbl.Text = "Dungeon: " .. nearest.Name
@@ -1350,7 +1447,9 @@ spawn(function()
     end
 end)
 
+--======================================================================
 -- AUTO DUNGEON V2
+--======================================================================
 spawn(function()
     while task.wait(0.4) do
         pcall(function()
@@ -1359,7 +1458,7 @@ spawn(function()
             if not (plg and plg:FindFirstChild("DungeonUI")) then
                 State.InRaid = false
                 local ent = DungeonEntrance()
-                if ent and Dist(ent.Position) > 30 then SetDesiredCFrame(ent)
+                if ent and Dist(ent.Position) > 30 then State.DesiredCFrame = ent
                 else TryEnterDungeon() end
                 return
             end
@@ -1384,7 +1483,7 @@ spawn(function()
             if nearest then
                 local hrp = nearest.HumanoidRootPart
                 State.AimPos = hrp.CFrame; State.AimPosRaw = hrp.Position
-                SetDesiredCFrame(ComputeFarmCFrame(hrp.Position))
+                State.DesiredCFrame = ComputeFarmCFrame(hrp.Position)
                 task.wait(0.03)
                 if Dist(hrp.Position) < 150 then
                     ClickMob(); UseSkills()
@@ -1396,7 +1495,9 @@ spawn(function()
     end
 end)
 
+--======================================================================
 -- AUTO FISH
+--======================================================================
 RunService.Stepped:Connect(function()
     if not Config.AutoFish then return end
     pcall(function()
