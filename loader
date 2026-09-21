@@ -1,120 +1,592 @@
---[[ TONKI — COMMAND HOOK + TEST ]]
+--[[ 
+    TONKI — AUTO PUZZLE LEARNER v2 + ANTI-AFK
+    Chạy ngầm, khi puzzle xuất hiện → tự dump + auto-solve.
+    Anti-AFK tích hợp để treo máy 24/7.
+    Không hook namecall, không gọi admin.
+]]
+
 local CG = game:GetService("CoreGui")
 local SG = game:GetService("StarterGui")
 local LP = game:GetService("Players").LocalPlayer
+local UIS = game:GetService("UserInputService")
+local VIM = game:GetService("VirtualInputManager")
 
 local Log = {}
 local function add(t) table.insert(Log, t); print("[TonKi]", t) end
 
--- Bật hook trước
-local hooked = false
+local found = false
+local currentGrid = nil
+local knownContainer = nil
+local lastGridKey = ""
+local solveAttempts = 0
+local solvePath = nil
+
+--======================================================================
+-- ANTI-AFK
+--======================================================================
+local AntiAFK_Enabled = true
+local AntiAFK_LastPing = tick()
+
+-- Cách 1: hook Player.Idled (nếu có)
 pcall(function()
-    local oldNC
-    oldNC = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if method == "FireServer" or method == "InvokeServer" then
-            local full = "?"
-            pcall(function() full = self:GetFullName() end)
-            local args = {...}
-            local s = ""
-            for _, a in ipairs(args) do
-                s = s .. typeof(a) .. ":" .. tostring(a):sub(1,40) .. " | "
-            end
-            add("[HOOK] " .. method .. " → " .. full .. " args=[" .. s .. "]")
-        end
-        return oldNC(self, ...)
-    end))
-    hooked = true
-    add("[Hook] OK")
-end)
-
-if not hooked then
-    add("[X] Hook failed")
-    return
-end
-
--- CommandBox
-local plg = LP:FindFirstChild("PlayerGui")
-local cmdFrame = plg.MainGui.StarterFrame.CommandFrame
-local cmdBox = cmdFrame.MainFrame.CommandBox
-
--- GUI
-local gui = Instance.new("ScreenGui", CG)
-gui.Name = "TonKiCmdTest"; gui.ResetOnSpawn = false
-local fr = Instance.new("Frame", gui)
-fr.Size=UDim2.new(1,0,1,0); fr.BackgroundColor3=Color3.fromRGB(8,8,10); fr.BorderSizePixel=0
-
-local close = Instance.new("TextButton", fr)
-close.Size=UDim2.new(0,100,0,32); close.Position=UDim2.new(1,-110,0,10)
-close.BackgroundColor3=Color3.fromRGB(180,40,40); close.Text="ĐÓNG"
-close.TextColor3=Color3.new(1,1,1); close.Font=Enum.Font.GothamBold; close.TextSize=14
-close.MouseButton1Click:Connect(function() gui:Destroy() end)
-
-local copy = Instance.new("TextButton", fr)
-copy.Size=UDim2.new(0,120,0,32); copy.Position=UDim2.new(1,-240,0,10)
-copy.BackgroundColor3=Color3.fromRGB(40,140,60); copy.Text="COPY"
-copy.TextColor3=Color3.new(1,1,1); copy.Font=Enum.Font.GothamBold; copy.TextSize=14
-copy.Parent=fr
-
--- Nút test các lệnh khác nhau
-local tests = {
-    {name="tp me to me",   cmd="tp "..LP.Name.." "..LP.Name},
-    {name="sbpuzzle 30s",  cmd="sbpuzzle "..LP.Name.." 30"},
-    {name="heal",          cmd="heal "..LP.Name},
-    {name="respawn",       cmd="respawn "..LP.Name},
-    {name="level +1",      cmd="level "..LP.Name.." 5451"},
-    {name="TEST custom",   cmd=nil},  -- dùng CommandBox hiện tại
-}
-
-local y = 50
-for _, t in ipairs(tests) do
-    local b = Instance.new("TextButton", fr)
-    b.Size=UDim2.new(0, 220, 0, 26); b.Position=UDim2.new(0, 10, 0, y)
-    b.BackgroundColor3=Color3.fromRGB(30,26,12)
-    b.Text="TEST: "..t.name
-    b.TextColor3=Color3.fromRGB(245,205,95)
-    b.Font=Enum.Font.GothamMedium; b.TextSize=11
-    b.Parent=fr
-    Instance.new("UICorner", b).CornerRadius=UDim.new(0,5)
-    b.MouseButton1Click:Connect(function()
-        if t.cmd then
-            cmdBox.Text = t.cmd
-        end
-        task.wait(0.1)
-        add("[TEST] " .. t.name .. " | CmdBox.Text='" .. cmdBox.Text .. "'")
-        -- fire FocusLost với enter=true
-        if firesignal then
-            pcall(function() firesignal(cmdBox.FocusLost, true) end)
-        else
-            -- fallback: fire connections trực tiếp
-            local conns = getconnections(cmdBox.FocusLost)
-            for _, c in ipairs(conns) do
-                pcall(function() c.Function(true) end)
-            end
+    LP.Idled:Connect(function()
+        if AntiAFK_Enabled then
+            add("[AntiAFK] Idled event — resetting")
+            pcall(function()
+                VIM:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+                task.wait(0.05)
+                VIM:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+            end)
         end
     end)
-    y = y + 30
+end)
+
+-- Cách 2: định kỳ gửi input giả để không bị kick
+spawn(function()
+    while true do
+        task.wait(60)  -- mỗi 60 giây
+        if AntiAFK_Enabled then
+            pcall(function()
+                -- Mouse move giả (nhẹ nhất, không trigger gì)
+                local mouse = UIS:GetMouseLocation()
+                VIM:SendMouseMoveEvent(mouse.X + 1, mouse.Y + 1, false)
+                task.wait(0.02)
+                VIM:SendMouseMoveEvent(mouse.X, mouse.Y, false)
+                AntiAFK_LastPing = tick()
+            end)
+        end
+    end
+end)
+
+-- Cách 3: dự phòng bằng phím
+spawn(function()
+    while true do
+        task.wait(240)  -- mỗi 4 phút
+        if AntiAFK_Enabled then
+            pcall(function()
+                VIM:SendKeyEvent(true, Enum.KeyCode.W, false, game)
+                task.wait(0.03)
+                VIM:SendKeyEvent(false, Enum.KeyCode.W, false, game)
+                AntiAFK_LastPing = tick()
+            end)
+        end
+    end
+end)
+
+--======================================================================
+-- DETECT PUZZLE
+--======================================================================
+local function detectPuzzle()
+    local plg = LP:FindFirstChild("PlayerGui")
+    if not plg then return nil, nil end
+
+    if knownContainer and knownContainer.Parent then
+        local tiles = {}
+        for _, c in ipairs(knownContainer:GetChildren()) do
+            if c:IsA("ImageButton") then table.insert(tiles, c) end
+        end
+        if #tiles == 16 then return knownContainer, tiles end
+    end
+
+    for _, g in ipairs(plg:GetDescendants()) do
+        if (g:IsA("Frame") or g:IsA("ScreenGui") or g:IsA("ScrollingFrame"))
+        and g.Visible and g.Enabled ~= false then
+            local tiles = {}
+            for _, c in ipairs(g:GetChildren()) do
+                if c:IsA("ImageButton") and c.Visible then table.insert(tiles, c) end
+            end
+            if #tiles == 16 then
+                knownContainer = g
+                return g, tiles
+            end
+        end
+    end
+
+    for _, g in ipairs(plg:GetDescendants()) do
+        if g:IsA("Folder") or g:IsA("Frame") then
+            local tiles = {}
+            for _, c in ipairs(g:GetDescendants()) do
+                if c:IsA("ImageButton") and c.Visible then
+                    table.insert(tiles, c)
+                    if #tiles > 16 then break end
+                end
+            end
+            if #tiles == 16 then
+                knownContainer = g
+                return g, tiles
+            end
+        end
+    end
+
+    return nil, nil
 end
 
+--======================================================================
+-- BUILD GRID
+--======================================================================
+local function buildGrid(tiles)
+    local xs, ys = {}, {}
+    for _, t in ipairs(tiles) do
+        table.insert(xs, t.AbsolutePosition.X)
+        table.insert(ys, t.AbsolutePosition.Y)
+    end
+    table.sort(xs); table.sort(ys)
+
+    local function cluster(vals)
+        local out = {}
+        for _, v in ipairs(vals) do
+            if #out == 0 or math.abs(v - out[#out]) > 5 then
+                table.insert(out, v)
+            end
+        end
+        return out
+    end
+    local cols = cluster(xs)
+    local rows = cluster(ys)
+    if #cols ~= 4 or #rows ~= 4 then return nil end
+
+    local grid = {}
+    for r = 1, 4 do grid[r] = {} end
+
+    for _, t in ipairs(tiles) do
+        local px, py = t.AbsolutePosition.X, t.AbsolutePosition.Y
+        local col, row = nil, nil
+        for i, cx in ipairs(cols) do if math.abs(px - cx) <= 5 then col = i end end
+        for i, cy in ipairs(rows) do if math.abs(py - cy) <= 5 then row = i end end
+        if row and col and not grid[row][col] then
+            grid[row][col] = {
+                btn = t,
+                img = t.Image or "",
+                lo = t.LayoutOrder or -1,
+                name = t.Name,
+                row = row, col = col,
+            }
+        end
+    end
+
+    for r = 1, 4 do
+        for c = 1, 4 do
+            if not grid[r][c] then return nil end
+        end
+    end
+    return grid
+end
+
+--======================================================================
+-- HYPOTHESIS
+--======================================================================
+local function getIdHypo(tile, hypo)
+    if hypo == 1 then
+        if tile.img == "" then return 0 end
+        return tonumber(tile.img:match("(%d+)$")) or 0
+    elseif hypo == 2 then
+        return tile.lo
+    elseif hypo == 3 then
+        return tonumber(tile.name:match("(%d+)")) or 0
+    end
+    return 0
+end
+
+local function gridToIds(grid, hypo)
+    local ids = {}
+    for r = 1, 4 do
+        ids[r] = {}
+        for c = 1, 4 do
+            ids[r][c] = getIdHypo(grid[r][c], hypo)
+        end
+    end
+    return ids
+end
+
+local function buildGoalHypo(ids, emptyId)
+    local all = {}
+    for r = 1, 4 do
+        for c = 1, 4 do
+            table.insert(all, ids[r][c])
+        end
+    end
+    table.sort(all)
+
+    local goal = {}
+    local idx = 1
+    for r = 1, 4 do
+        goal[r] = {}
+        for c = 1, 4 do
+            if r == 4 and c == 4 then
+                goal[r][c] = emptyId
+            else
+                goal[r][c] = all[idx]
+                idx = idx + 1
+            end
+        end
+    end
+    return goal
+end
+
+local function findEmpty(grid)
+    for r = 1, 4 do
+        for c = 1, 4 do
+            local t = grid[r][c]
+            if t.img == "" or t.btn.ImageTransparency >= 0.99 then
+                return r, c
+            end
+        end
+    end
+    return nil, nil
+end
+
+--======================================================================
+-- A*
+--======================================================================
+local function key(g)
+    local s = ""
+    for r = 1, 4 do
+        for c = 1, 4 do s = s .. tostring(g[r][c]) .. "," end
+    end
+    return s
+end
+
+local function manhattan(g, goal)
+    local sum = 0
+    local map = {}
+    for r = 1, 4 do
+        for c = 1, 4 do
+            map[goal[r][c]] = {r=r, c=c}
+        end
+    end
+    for r = 1, 4 do
+        for c = 1, 4 do
+            local v = g[r][c]
+            if v ~= 0 and map[v] then
+                sum = sum + math.abs(r - map[v].r) + math.abs(c - map[v].c)
+            end
+        end
+    end
+    return sum
+end
+
+local function clone(g)
+    local ng = {}
+    for r = 1, 4 do
+        ng[r] = {}
+        for c = 1, 4 do ng[r][c] = g[r][c] end
+    end
+    return ng
+end
+
+local function findZero(g)
+    for r = 1, 4 do
+        for c = 1, 4 do if g[r][c] == 0 then return r, c end end
+    end
+end
+
+local function solveAStar(start, goal, maxIter)
+    maxIter = maxIter or 500000
+    local goalK = key(goal)
+    if key(start) == goalK then return {} end
+
+    local open = {}
+    local function push(n)
+        table.insert(open, n)
+        local i = #open
+        while i > 1 do
+            local p = math.floor(i/2)
+            if open[p].f <= open[i].f then break end
+            open[p], open[i] = open[i], open[p]
+            i = p
+        end
+    end
+    local function pop()
+        local top = open[1]
+        open[1] = open[#open]; open[#open] = nil
+        local i = 1
+        while true do
+            local l, r = i*2, i*2+1
+            local s = i
+            if l <= #open and open[l].f < open[s].f then s = l end
+            if r <= #open and open[r].f < open[s].f then s = r end
+            if s == i then break end
+            open[i], open[s] = open[s], open[i]
+            i = s
+        end
+        return top
+    end
+
+    push({ g = clone(start), gc = 0, f = manhattan(start, goal), parent = nil, move = nil, k = key(start) })
+    local visited = { [key(start)] = 0 }
+
+    local iter = 0
+    while #open > 0 do
+        iter = iter + 1
+        if iter > maxIter then return nil, "iter limit" end
+
+        local cur = pop()
+        if cur.k == goalK then
+            local path = {}
+            local n = cur
+            while n and n.move do
+                table.insert(path, 1, n.move)
+                n = n.parent
+            end
+            return path
+        end
+
+        local er, ec = findZero(cur.g)
+        local dirs = {{er-1,ec},{er+1,ec},{er,ec-1},{er,ec+1}}
+        for _, d in ipairs(dirs) do
+            local nr, nc = d[1], d[2]
+            if nr >= 1 and nr <= 4 and nc >= 1 and nc <= 4 then
+                local ng = clone(cur.g)
+                ng[er][ec], ng[nr][nc] = ng[nr][nc], ng[er][ec]
+                local k = key(ng)
+                if not visited[k] or visited[k] > cur.gc + 1 then
+                    visited[k] = cur.gc + 1
+                    push({
+                        g = ng, gc = cur.gc + 1,
+                        f = cur.gc + 1 + manhattan(ng, goal),
+                        parent = cur,
+                        move = { from = {er,ec}, to = {nr,nc} },
+                        k = k,
+                    })
+                end
+            end
+        end
+    end
+    return nil, "no solution"
+end
+
+--======================================================================
+-- DO MOVE
+--======================================================================
+local function doMove(fromR, fromC, toR, toC)
+    if not currentGrid then return false end
+    local tile = currentGrid[toR] and currentGrid[toR][toC]
+    if not tile or not tile.btn then return false end
+
+    local btn = tile.btn
+    if firesignal then
+        pcall(function() firesignal(btn.MouseButton1Click) end)
+    end
+    if not firesignal then
+        local ok, conns = pcall(getconnections, btn.MouseButton1Click)
+        if ok and conns then
+            for _, c in ipairs(conns) do pcall(function() c:Fire() end) end
+        end
+    end
+    currentGrid[fromR][fromC], currentGrid[toR][toC] =
+        currentGrid[toR][toC], currentGrid[fromR][fromC]
+    return true
+end
+
+--======================================================================
+-- MAIN LOOP
+--======================================================================
+local AutoSolve = true
+local MoveDelay = 0.12
+
+spawn(function()
+    while true do
+        task.wait(1)
+        if not AutoSolve then continue end
+
+        local cont, tiles = detectPuzzle()
+        if not cont then
+            if found then
+                add("[State] Puzzle đóng. Chờ lần sau...")
+                found = false
+                currentGrid = nil
+                solvePath = nil
+                solveAttempts = 0
+                lastGridKey = ""
+            end
+            continue
+        end
+
+        local grid = buildGrid(tiles)
+        if not grid then
+            add("[X] Build grid fail")
+            continue
+        end
+        currentGrid = grid
+
+        if not found then
+            found = true
+            solveAttempts = 0
+            add("\n[✓] Đã phát hiện puzzle 4x4! Container: " .. cont:GetFullName())
+            add("=== TILE DUMP ===")
+            for r = 1, 4 do
+                for c = 1, 4 do
+                    local t = grid[r][c]
+                    add(("[%d,%d] N=%s LO=%d Img=%s"):format(
+                        r, c, t.name, t.lo, (t.img == "" and "EMPTY" or t.img:sub(-30))))
+                end
+            end
+        end
+
+        local curKey = key(gridToIds(grid, 1))
+        if curKey == lastGridKey then continue end
+        lastGridKey = curKey
+
+        solveAttempts = solveAttempts + 1
+        if solveAttempts <= 3 then
+            add("[Try] Hypothesis #" .. solveAttempts)
+            local ids = gridToIds(grid, solveAttempts)
+            local er, ec = findEmpty(grid)
+            if not er then
+                add("  → không tìm được empty tile")
+                continue
+            end
+            local emptyId = ids[er][ec]
+            if solveAttempts == 1 and emptyId ~= 0 then
+                ids[er][ec] = 0
+                emptyId = 0
+            end
+            add("  → Empty: [" .. er .. "," .. ec .. "] ID=" .. tostring(emptyId))
+
+            local goal = buildGoalHypo(ids, emptyId)
+            add("  → Goal:")
+            for r = 1, 4 do
+                local row = "     "
+                for c = 1, 4 do row = row .. tostring(goal[r][c]) .. " " end
+                add(row)
+            end
+
+            add("  → Chạy A*...")
+            local t0 = tick()
+            local path, err = solveAStar(ids, goal, 200000)
+            local dt = tick() - t0
+            if path then
+                add(("  → SOLVED! %d moves, %.2fs"):format(#path, dt))
+                solvePath = path
+                task.spawn(function()
+                    add("  → Bắt đầu thực thi...")
+                    for i, m in ipairs(path) do
+                        doMove(m.from[1], m.from[2], m.to[1], m.to[2])
+                        task.wait(MoveDelay)
+                    end
+                    add("  → Xong!")
+                end)
+                break
+            else
+                add("  → Fail: " .. tostring(err))
+            end
+        end
+    end
+end)
+
+--======================================================================
+-- GUI
+--======================================================================
+local gui = Instance.new("ScreenGui", CG)
+gui.Name = "TonKiPuzzleLearner"; gui.ResetOnSpawn = false
+local fr = Instance.new("Frame", gui)
+fr.Size = UDim2.new(0, 340, 0, 460)
+fr.Position = UDim2.new(0, 20, 0.12, 0)
+fr.BackgroundColor3 = Color3.fromRGB(12,12,16); fr.BorderSizePixel = 0
+fr.Active = true; fr.Draggable = true
+Instance.new("UICorner", fr).CornerRadius = UDim.new(0,10)
+local st = Instance.new("UIStroke", fr); st.Color = Color3.fromRGB(245,205,95); st.Thickness=1.2
+
+local title = Instance.new("TextLabel", fr)
+title.Size=UDim2.new(1,-20,0,26); title.Position=UDim2.new(0,10,0,6)
+title.BackgroundTransparency=1
+title.Text="◈ PUZZLE LEARNER + ANTI-AFK"
+title.TextColor3=Color3.fromRGB(245,205,95); title.Font=Enum.Font.GothamBold
+title.TextSize=13; title.TextXAlignment=Enum.TextXAlignment.Left
+
+local statusLbl = Instance.new("TextLabel", fr)
+statusLbl.Size=UDim2.new(1,-20,0,16); statusLbl.Position=UDim2.new(0,10,0,28)
+statusLbl.BackgroundTransparency=1
+statusLbl.Text="Đang chờ puzzle... | AFK: ON"
+statusLbl.TextColor3=Color3.fromRGB(180,220,180); statusLbl.Font=Enum.Font.Gotham
+statusLbl.TextSize=11; statusLbl.TextXAlignment=Enum.TextXAlignment.Left
+
+local afkLbl = Instance.new("TextLabel", fr)
+afkLbl.Size=UDim2.new(1,-20,0,16); afkLbl.Position=UDim2.new(0,10,0,44)
+afkLbl.BackgroundTransparency=1
+afkLbl.Text="Last ping: --"
+afkLbl.TextColor3=Color3.fromRGB(150,180,220); afkLbl.Font=Enum.Font.Gotham
+afkLbl.TextSize=10; afkLbl.TextXAlignment=Enum.TextXAlignment.Left
+
 local sc = Instance.new("ScrollingFrame", fr)
-sc.Size=UDim2.new(1,-20,1,-320); sc.Position=UDim2.new(0,10,0,300)
+sc.Size=UDim2.new(1,-20,1,-170); sc.Position=UDim2.new(0,10,0,66)
 sc.BackgroundColor3=Color3.fromRGB(0,0,0); sc.BorderSizePixel=0
-sc.ScrollBarThickness=8; sc.AutomaticCanvasSize=Enum.AutomaticSize.Y
+sc.ScrollBarThickness=4; sc.AutomaticCanvasSize=Enum.AutomaticSize.Y
 sc.CanvasSize=UDim2.new(0,0,0,0)
 local lay = Instance.new("UIListLayout", sc)
 lay.SortOrder=Enum.SortOrder.LayoutOrder; lay.Padding=UDim.new(0,2)
 
--- live log
+local function mkBtn(text, y, cb, right)
+    local b = Instance.new("TextButton", fr)
+    b.Size=UDim2.new(0.47,0,0,26)
+    b.Position=UDim2.new(right and 0.51 or 0, right and 0 or 10, 1, y)
+    b.BackgroundColor3=Color3.fromRGB(30,26,12)
+    b.Text=text; b.TextColor3=Color3.fromRGB(245,205,95)
+    b.Font=Enum.Font.GothamMedium; b.TextSize=10
+    Instance.new("UICorner", b).CornerRadius=UDim.new(0,5)
+    b.MouseButton1Click:Connect(function() if cb then pcall(cb) end end)
+    return b
+end
+
+mkBtn("TOGGLE AUTO SOLVE", -152, function()
+    AutoSolve = not AutoSolve
+    statusLbl.Text = "Auto Solve: " .. (AutoSolve and "ON" or "OFF")
+end)
+
+mkBtn("TOGGLE ANTI-AFK", -152, function()
+    AntiAFK_Enabled = not AntiAFK_Enabled
+    add("[AntiAFK] " .. (AntiAFK_Enabled and "ON" or "OFF"))
+end, true)
+
+mkBtn("DELAY 0.05s", -122, function() MoveDelay = 0.05 end)
+mkBtn("DELAY 0.12s", -122, function() MoveDelay = 0.12 end, true)
+
+mkBtn("DELAY 0.25s", -92, function() MoveDelay = 0.25 end)
+mkBtn("FORCE AFK PING", -92, function()
+    pcall(function()
+        VIM:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+        task.wait(0.05)
+        VIM:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+        AntiAFK_LastPing = tick()
+    end)
+end, true)
+
+mkBtn("COPY LOG", -62, function()
+    local txt = table.concat(Log, "\n")
+    if setclipboard then pcall(function() setclipboard(txt) end) end
+    if writefile then pcall(function() writefile("TonKi_PuzzleLearner.txt", txt) end) end
+    statusLbl.Text = "Đã copy " .. #Log .. " dòng"
+end)
+
+mkBtn("CLEAR LOG", -62, function()
+    Log = {}
+    for _, c in ipairs(sc:GetChildren()) do
+        if c:IsA("TextLabel") then c:Destroy() end
+    end
+end, true)
+
+mkBtn("RESET PUZZLE STATE", -32, function()
+    found = false
+    currentGrid = nil
+    solvePath = nil
+    solveAttempts = 0
+    lastGridKey = ""
+    add("[Reset] Puzzle state cleared")
+end)
+
+mkBtn("CLOSE", -32, function() gui:Destroy() end, true)
+
+-- render log
 spawn(function()
     local last = 0
     while gui.Parent do
-        task.wait(0.2)
+        task.wait(0.3)
         if #Log > last then
             for i = last + 1, #Log do
                 local lb = Instance.new("TextLabel", sc)
                 lb.Size=UDim2.new(1,-8,0,14); lb.BackgroundTransparency=1
                 lb.Text=Log[i]; lb.TextColor3=Color3.fromRGB(210,210,210)
-                lb.Font=Enum.Font.Code; lb.TextSize=10
+                lb.Font=Enum.Font.Code; lb.TextSize=9
                 lb.TextXAlignment=Enum.TextXAlignment.Left
                 lb.LayoutOrder=i
             end
@@ -124,12 +596,22 @@ spawn(function()
     end
 end)
 
-copy.MouseButton1Click:Connect(function()
-    local txt = table.concat(Log, "\n")
-    if setclipboard then pcall(function() setclipboard(txt) end) end
-    if writefile then pcall(function() writefile("TonKi_CmdTest.txt", txt) end) end
-    copy.Text="DONE"; task.wait(1); copy.Text="COPY"
+-- update AFK status
+spawn(function()
+    while gui.Parent do
+        task.wait(1)
+        local dt = math.floor(tick() - AntiAFK_LastPing)
+        afkLbl.Text = ("AFK: %s | Last ping: %ds trước"):format(
+            AntiAFK_Enabled and "ON" or "OFF", dt)
+    end
 end)
 
-pcall(function() SG:SetCore("SendNotification", {Title="TonKi", Text="Bấm TEST để hook + fire lệnh", Duration=5}) end)
+pcall(function()
+    SG:SetCore("SendNotification", {
+        Title="TonKi Puzzle + AFK",
+        Text="Anti-AFK ON. Treo máy được. Đợi sea beast quest → puzzle tự solve.",
+        Duration=6
+    })
+end)
+
 return Log
