@@ -1,221 +1,96 @@
 --[[
-    ╔══════════════════════════════════════════════════════════╗
-    ║         TONKI HUB — PLAY BUTTON DIAGNOSTIC v1.0          ║
-    ║  Chạy ở loading screen, đợi Play xuất hiện, dump tất cả  ║
-    ╚══════════════════════════════════════════════════════════╝
-
-    HƯỚNG DẪN:
-    1. Executor (Delta/Scriptware/etc) → paste script này → Execute
-    2. Vào game King Legacy (loading screen hiện Play)
-    3. Đợi 3-5s cho script dump
-    4. Mở console (F9) hoặc xem clipboard, copy toàn bộ kết quả gửi mình
+    TONKI HUB — PLAY DUMP GUI v1.0
+    Chạy script này ở loading screen, xem kết quả trên GUI trong game.
+    Không cần console.
 ]]
 
 local Players = game:GetService("Players")
 local RS      = game:GetService("ReplicatedStorage")
-local SG      = game:GetService("StarterGui")
+local CG      = game:GetService("CoreGui")
 local LP      = Players.LocalPlayer
 
 local OUT = {}
+local function log(s) table.insert(OUT, s) print(s) end
 
-local function log(s)
-    table.insert(OUT, s)
-    print(s)
-end
-
-local function sep(t)
-    log("\n══════════ " .. t .. " ══════════")
-end
-
-local function safe(fn, ...)
-    local ok, res = pcall(fn, ...)
-    if ok then return res end
-    return "[ERR: " .. tostring(res) .. "]"
-end
-
---======================================================================
--- Đợi Play button
---======================================================================
-local playBtn = nil
-local playGui = nil
-local elapsed = 0
-
-log("TonKi Hub Diagnostic started...")
-log("Đang tìm nút Play trong PlayerGui...")
-
-while elapsed < 30 do
+-- Tìm Play button
+local playBtn
+local t = 0
+while t < 30 do
     local plg = LP:FindFirstChild("PlayerGui")
     if plg then
-        -- Tìm theo LoadingGUI/Play trước
-        local loading = plg:FindFirstChild("LoadingGUI")
-        if loading then
-            local p = loading:FindFirstChild("Play")
-            if p and p:IsA("TextButton") and p.Visible then
-                playBtn = p
-                playGui = loading
-                break
-            end
+        local lg = plg:FindFirstChild("LoadingGUI")
+        if lg then
+            local p = lg:FindFirstChild("Play")
+            if p and p:IsA("TextButton") and p.Visible then playBtn = p break end
         end
-        -- Fallback: quét toàn bộ
         for _, g in ipairs(plg:GetDescendants()) do
-            if g:IsA("TextButton") and g.Visible then
-                local t = g.Text:lower():gsub("%s","")
-                if t == "play" then
-                    playBtn = g
-                    playGui = g.Parent
-                    break
-                end
+            if g:IsA("TextButton") and g.Visible and g.Text:lower():gsub("%s","") == "play" then
+                playBtn = g break
             end
         end
         if playBtn then break end
     end
-    task.wait(0.2)
-    elapsed = elapsed + 0.2
+    task.wait(0.2); t = t + 0.2
 end
 
 if not playBtn then
-    log("[X] Không tìm thấy nút Play sau 30s. Chạy lại ở loading screen.")
-    if setclipboard then setclipboard(table.concat(OUT, "\n")) end
-    return
-end
+    log("[X] Không tìm thấy nút Play. Chạy lại ở loading screen.")
+else
+    log("=== BUTTON ===")
+    log("Class: " .. playBtn.ClassName)
+    log("Name : " .. playBtn.Name)
+    log("Full : " .. playBtn:GetFullName())
+    log("Text : " .. tostring(playBtn.Text))
 
-log("[✓] Đã tìm thấy Play button!")
-
---======================================================================
--- 1. Thông tin cơ bản button
---======================================================================
-sep("BUTTON INFO")
-log("ClassName      : " .. playBtn.ClassName)
-log("Name           : " .. playBtn.Name)
-log("FullName       : " .. playBtn:GetFullName())
-log("Text           : " .. tostring(playBtn.Text))
-log("Visible        : " .. tostring(playBtn.Visible))
-log("Active         : " .. tostring(playBtn.Active))
-log("AutoButtonColor: " .. tostring(playBtn.AutoButtonColor))
-log("Position       : " .. tostring(playBtn.Position))
-log("Size           : " .. tostring(playBtn.Size))
-log("TextColor3     : " .. tostring(playBtn.TextColor3))
-
---======================================================================
--- 2. Hierarchy (ancestors)
---======================================================================
-sep("HIERARCHY")
-local anc = playBtn
-local depth = 0
-while anc and depth < 10 do
-    log(string.rep("  ", depth) .. "└─ " .. anc.ClassName .. " : " .. anc.Name)
-    anc = anc.Parent
-    depth = depth + 1
-    if anc == game then break end
-end
-
---======================================================================
--- 3. Siblings trong parent
---======================================================================
-sep("SIBLINGS")
-if playBtn.Parent then
-    log("Parent: " .. playBtn.Parent:GetFullName())
-    for _, child in ipairs(playBtn.Parent:GetChildren()) do
-        log("  • " .. child.ClassName .. " | " .. child.Name ..
-            (child == playBtn and "  ← PLAY" or ""))
+    log("\n=== HIERARCHY ===")
+    local a, d = playBtn, 0
+    while a and d < 10 do
+        log(string.rep("  ", d) .. "└ " .. a.ClassName .. " : " .. a.Name)
+        a = a.Parent; d = d + 1
+        if a == game then break end
     end
-end
 
---======================================================================
--- 4. Connections — fire signals
---======================================================================
-sep("CONNECTIONS ON PLAY BUTTON")
-for _, sig in ipairs({
-    "MouseButton1Click","MouseButton1Down","MouseButton1Up",
-    "Activated","TouchTap","InputBegan","InputEnded","InputChanged"
-}) do
-    local ok, conns = pcall(getconnections, playBtn[sig])
-    if ok and conns then
-        log(sig .. " → " .. #conns .. " connection(s)")
-        for i, c in ipairs(conns) do
-            log("   [" .. i .. "]")
-            log("      Function : " .. tostring(c.Function))
-            log("      State    : " .. tostring(c.State))
-            log("      Thread   : " .. tostring(c.Thread))
-
-            -- Upvalues của function
-            local fn = c.Function
-            if fn then
-                for j = 1, 20 do
-                    local ok2, uv = pcall(getupvalue, fn, j)
-                    if not ok2 or uv == nil then break end
-                    local uvType = typeof(uv)
-                    local uvVal = tostring(uv)
-                    if uvType == "table" or uvType == "userdata" then
-                        uvVal = uvVal .. " ["
-                        if uv.Name then uvVal = uvVal .. "Name=" .. tostring(uv.Name) end
-                        if uv.ClassName then uvVal = uvVal .. " Class=" .. tostring(uv.ClassName) end
-                        if uv.GetFullName then
-                            local ok3, full = pcall(function() return uv:GetFullName() end)
-                            if ok3 then uvVal = uvVal .. " Full=" .. full end
+    log("\n=== CONNECTIONS ===")
+    for _, sig in ipairs({"MouseButton1Click","MouseButton1Down","Activated","TouchTap"}) do
+        local ok, conns = pcall(getconnections, playBtn[sig])
+        if ok and conns then
+            log(sig .. " -> " .. #conns)
+            for i, c in ipairs(conns) do
+                log("  [" .. i .. "] " .. tostring(c.Function))
+                local fn = c.Function
+                if fn then
+                    for j = 1, 15 do
+                        local ok2, uv = pcall(getupvalue, fn, j)
+                        if not ok2 or uv == nil then break end
+                        local tt = typeof(uv)
+                        local vv = tostring(uv)
+                        if (tt == "table" or tt == "userdata") and uv.Name then
+                            vv = vv .. " [Name=" .. uv.Name .. "]"
                         end
-                        uvVal = uvVal .. "]"
-                    elseif uvType == "function" then
-                        uvVal = "[function] " .. tostring(uv)
+                        log("    UV[" .. j .. "] " .. tt .. " = " .. vv)
                     end
-                    log("      UV[" .. j .. "] : " .. uvType .. " = " .. uvVal)
                 end
             end
         end
     end
-end
 
---======================================================================
--- 5. Quét các RemoteEvent/RemoteFunction gần đó (Ancestors)
---======================================================================
-sep("REMOTES IN ANCESTORS")
-local scanRoot = playBtn
-for _ = 1, 3 do
-    if scanRoot.Parent then scanRoot = scanRoot.Parent end
-end
-log("Scanning: " .. scanRoot:GetFullName())
-local remotesFound = 0
-for _, obj in ipairs(scanRoot:GetDescendants()) do
-    if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")
-    or obj:IsA("BindableEvent") or obj:IsA("BindableFunction") then
-        log("  • " .. obj.ClassName .. " : " .. obj:GetFullName())
-        remotesFound = remotesFound + 1
-    end
-end
-log("Total remotes in ancestors: " .. remotesFound)
-
---======================================================================
--- 6. Quét toàn bộ ReplicatedStorage remotes có tên đáng ngờ
---======================================================================
-sep("LIKELY PLAY REMOTES IN REPLICATEDSTORAGE")
-local keywords = {"play","load","spawn","ready","enter","start","begin","join","game","click"}
-local hit = 0
-for _, obj in ipairs(RS:GetDescendants()) do
-    if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-        local n = obj.Name:lower()
-        for _, kw in ipairs(keywords) do
-            if n:find(kw) then
-                log("  → " .. obj.ClassName .. " : " .. obj:GetFullName())
-                hit = hit + 1
-                break
-            end
+    log("\n=== NEARBY REMOTES ===")
+    local root = playBtn
+    for _ = 1, 3 do if root.Parent then root = root.Parent end end
+    for _, obj in ipairs(root:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            log("  " .. obj.ClassName .. " : " .. obj.Name)
         end
     end
-end
-log("Total hits: " .. hit)
 
---======================================================================
--- 7. Quét PlayerScripts — tìm ModuleScript có chữ "Play"/"Load"
---======================================================================
-sep("PLAYERSCRIPTS — MODULES LIÊN QUAN")
-local ps = LP:FindFirstChild("PlayerScripts")
-if ps then
-    for _, obj in ipairs(ps:GetDescendants()) do
-        if obj:IsA("ModuleScript") or obj:IsA("LocalScript") then
+    log("\n=== LIKELY PLAY REMOTES (RS) ===")
+    local kws = {"play","load","spawn","ready","enter","start","begin","join"}
+    for _, obj in ipairs(RS:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
             local n = obj.Name:lower()
-            for _, kw in ipairs(keywords) do
+            for _, kw in ipairs(kws) do
                 if n:find(kw) then
-                    log("  • " .. obj.ClassName .. " : " .. obj:GetFullName())
+                    log("  " .. obj.ClassName .. " : " .. obj:GetFullName())
                     break
                 end
             end
@@ -224,47 +99,86 @@ if ps then
 end
 
 --======================================================================
--- 8. PlayerGui full tree (top 3 levels)
+-- GUI HIỆN KẾT QUẢ
 --======================================================================
-sep("PLAYERGUI TOP-LEVEL")
-local plg = LP:FindFirstChild("PlayerGui")
-if plg then
-    for _, child in ipairs(plg:GetChildren()) do
-        log("  • " .. child.ClassName .. " : " .. child.Name ..
-            " (Visible=" .. tostring(child.Visible) .. ")")
-    end
-end
+local gui = Instance.new("ScreenGui")
+gui.Name = "TonKiDumpGui"
+gui.ResetOnSpawn = false
+gui.Parent = CG
 
---======================================================================
--- KẾT THÚC — in và copy
---======================================================================
-sep("END")
-log("Diagnostic complete. Copy và gửi cho TonKi Hub dev.")
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(1, 0, 1, 0)
+frame.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+frame.BorderSizePixel = 0
+frame.Parent = gui
+
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(0, 80, 0, 32)
+btn.Position = UDim2.new(1, -90, 0, 10)
+btn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+btn.Text = "ĐÓNG"
+btn.TextColor3 = Color3.new(1,1,1)
+btn.Font = Enum.Font.GothamBold
+btn.TextSize = 14
+btn.Parent = frame
+btn.MouseButton1Click:Connect(function() gui:Destroy() end)
+
+local copyBtn = Instance.new("TextButton")
+copyBtn.Size = UDim2.new(0, 120, 0, 32)
+copyBtn.Position = UDim2.new(1, -220, 0, 10)
+copyBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
+copyBtn.Text = "COPY"
+copyBtn.TextColor3 = Color3.new(1,1,1)
+copyBtn.Font = Enum.Font.GothamBold
+copyBtn.TextSize = 14
+copyBtn.Parent = frame
+
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -20, 1, -60)
+scroll.Position = UDim2.new(0, 10, 0, 50)
+scroll.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 8
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.Parent = frame
+
+local layout = Instance.new("UIListLayout")
+layout.Parent = scroll
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 2)
 
 local result = table.concat(OUT, "\n")
+for i, line in ipairs(OUT) do
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -10, 0, 18)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = line
+    lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Font = Enum.Font.Code
+    lbl.TextSize = 12
+    lbl.TextWrapped = false
+    lbl.LayoutOrder = i
+    lbl.Parent = scroll
+end
 
--- Copy vào clipboard nếu executor hỗ trợ
+copyBtn.MouseButton1Click:Connect(function()
+    if setclipboard then
+        pcall(function() setclipboard(result) end)
+        copyBtn.Text = "COPIED!"
+        task.wait(1)
+        copyBtn.Text = "COPY"
+    else
+        copyBtn.Text = "NO CLIP"
+        task.wait(1)
+        copyBtn.Text = "COPY"
+    end
+end)
+
 if setclipboard then
     pcall(function() setclipboard(result) end)
-    print("\n[✓] Đã copy kết quả vào clipboard!")
+    print("[TonKi Hub] Đã copy kết quả vào clipboard.")
 end
-
--- Ghi ra file nếu có writefile
-if writefile then
-    pcall(function()
-        local fname = "TonKiHub_PlayDump.txt"
-        writefile(fname, result)
-        print("[✓] Đã lưu vào file: " .. fname)
-    end)
-end
-
--- Notify
-pcall(function()
-    SG:SetCore("SendNotification", {
-        Title = "TonKi Hub",
-        Text = "Dump xong! Copy clipboard hoặc xem file TonKiHub_PlayDump.txt",
-        Duration = 5
-    })
-end)
 
 return result
