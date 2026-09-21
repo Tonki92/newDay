@@ -1,184 +1,195 @@
 --[[
-    TONKI HUB — PLAY DUMP GUI v1.0
-    Chạy script này ở loading screen, xem kết quả trên GUI trong game.
-    Không cần console.
+    TONKI HUB — PUZZLE DETECTOR v2
+    Chạy TRƯỚC khi nhận quest sea beast, để nó hook sẵn.
+    Khi puzzle hiện ra, script tự nhận diện + log.
 ]]
 
 local Players = game:GetService("Players")
 local RS      = game:GetService("ReplicatedStorage")
 local CG      = game:GetService("CoreGui")
+local SG      = game:GetService("StarterGui")
 local LP      = Players.LocalPlayer
 
-local OUT = {}
-local function log(s) table.insert(OUT, s) print(s) end
+local TraceLog = {}
+local TraceOn  = true
+local KnownGuis = {}
 
--- Tìm Play button
-local playBtn
-local t = 0
-while t < 30 do
-    local plg = LP:FindFirstChild("PlayerGui")
-    if plg then
-        local lg = plg:FindFirstChild("LoadingGUI")
-        if lg then
-            local p = lg:FindFirstChild("Play")
-            if p and p:IsA("TextButton") and p.Visible then playBtn = p break end
+-- Hook namecall — log MỌI FireServer/InvokeServer có number args
+local mt = getrawmetatable(game)
+local oldNC = mt.__namecall
+setreadonly(mt, false)
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    if TraceOn and (method == "InvokeServer" or method == "FireServer") then
+        local numCount = 0
+        for _, a in ipairs(args) do
+            if type(a) == "number" then numCount = numCount + 1 end
         end
-        for _, g in ipairs(plg:GetDescendants()) do
-            if g:IsA("TextButton") and g.Visible and g.Text:lower():gsub("%s","") == "play" then
-                playBtn = g break
-            end
+        if numCount >= 1 and numCount <= 3 then
+            local full = "?"
+            pcall(function() full = self:GetFullName() end)
+            table.insert(TraceLog, {
+                t = tick(), method = method,
+                remote = tostring(self), full = full, args = args,
+            })
+            if #TraceLog > 1000 then table.remove(TraceLog, 1) end
         end
-        if playBtn then break end
     end
-    task.wait(0.2); t = t + 0.2
+    return oldNC(self, ...)
+end)
+setreadonly(mt, true)
+
+--======================================================================
+-- GUI
+--======================================================================
+local gui = Instance.new("ScreenGui", CG)
+gui.Name = "TonKiPuzzleDetector"
+gui.ResetOnSpawn = false
+
+local panel = Instance.new("Frame", gui)
+panel.Size = UDim2.new(0, 300, 0, 420)
+panel.Position = UDim2.new(0, 20, 0.15, 0)
+panel.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+panel.BorderSizePixel = 0
+panel.Active = true
+panel.Draggable = true
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
+local st = Instance.new("UIStroke", panel)
+st.Color = Color3.fromRGB(245, 205, 95); st.Thickness = 1.2
+
+local title = Instance.new("TextLabel", panel)
+title.Size = UDim2.new(1, -20, 0, 26)
+title.Position = UDim2.new(0, 10, 0, 6)
+title.BackgroundTransparency = 1
+title.Text = "◈ PUZZLE DETECTOR"
+title.TextColor3 = Color3.fromRGB(245, 205, 95)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 13
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local logBox = Instance.new("ScrollingFrame", panel)
+logBox.Size = UDim2.new(1, -20, 1, -130)
+logBox.Position = UDim2.new(0, 10, 0, 36)
+logBox.BackgroundColor3 = Color3.fromRGB(0,0,0)
+logBox.BorderSizePixel = 0
+logBox.ScrollBarThickness = 4
+logBox.CanvasSize = UDim2.new(0,0,0,0)
+logBox.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+local lay = Instance.new("UIListLayout", logBox)
+lay.SortOrder = Enum.SortOrder.LayoutOrder
+lay.Padding = UDim.new(0, 2)
+
+local function addLog(t)
+    local l = Instance.new("TextLabel", logBox)
+    l.Size = UDim2.new(1, -6, 0, 14)
+    l.BackgroundTransparency = 1
+    l.Text = t
+    l.TextColor3 = Color3.fromRGB(210, 210, 210)
+    l.Font = Enum.Font.Code
+    l.TextSize = 10
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextWrapped = true
+    logBox.CanvasPosition = Vector2.new(0, 1e6)
 end
 
-if not playBtn then
-    log("[X] Không tìm thấy nút Play. Chạy lại ở loading screen.")
-else
-    log("=== BUTTON ===")
-    log("Class: " .. playBtn.ClassName)
-    log("Name : " .. playBtn.Name)
-    log("Full : " .. playBtn:GetFullName())
-    log("Text : " .. tostring(playBtn.Text))
+local function mkBtn(text, y, cb)
+    local b = Instance.new("TextButton", panel)
+    b.Size = UDim2.new(1, -20, 0, 26)
+    b.Position = UDim2.new(0, 10, 1, y)
+    b.BackgroundColor3 = Color3.fromRGB(30, 26, 12)
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(245, 205, 95)
+    b.Font = Enum.Font.GothamMedium
+    b.TextSize = 11
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+    b.MouseButton1Click:Connect(function() if cb then pcall(cb) end end)
+    return b
+end
 
-    log("\n=== HIERARCHY ===")
-    local a, d = playBtn, 0
-    while a and d < 10 do
-        log(string.rep("  ", d) .. "└ " .. a.ClassName .. " : " .. a.Name)
-        a = a.Parent; d = d + 1
-        if a == game then break end
+mkBtn("TOGGLE TRACE", -92, function()
+    TraceOn = not TraceOn
+    addLog("[Trace] " .. (TraceOn and "ON" or "OFF"))
+end)
+
+mkBtn("DUMP + COPY", -62, function()
+    local out = {}
+    for _, e in ipairs(TraceLog) do
+        local s = e.method .. " → " .. e.full .. "  [ "
+        for _, a in ipairs(e.args) do
+            s = s .. typeof(a) .. ":" .. tostring(a) .. " "
+        end
+        s = s .. "]"
+        table.insert(out, s)
     end
+    local txt = table.concat(out, "\n")
+    if setclipboard then pcall(function() setclipboard(txt) end) end
+    if writefile then pcall(function() writefile("TonKi_PuzzleLog.txt", txt) end) end
+    addLog("[Dump] " .. #out .. " entries copied")
+end)
 
-    log("\n=== CONNECTIONS ===")
-    for _, sig in ipairs({"MouseButton1Click","MouseButton1Down","Activated","TouchTap"}) do
-        local ok, conns = pcall(getconnections, playBtn[sig])
-        if ok and conns then
-            log(sig .. " -> " .. #conns)
-            for i, c in ipairs(conns) do
-                log("  [" .. i .. "] " .. tostring(c.Function))
-                local fn = c.Function
-                if fn then
-                    for j = 1, 15 do
-                        local ok2, uv = pcall(getupvalue, fn, j)
-                        if not ok2 or uv == nil then break end
-                        local tt = typeof(uv)
-                        local vv = tostring(uv)
-                        if (tt == "table" or tt == "userdata") and uv.Name then
-                            vv = vv .. " [Name=" .. uv.Name .. "]"
-                        end
-                        log("    UV[" .. j .. "] " .. tt .. " = " .. vv)
+mkBtn("SCAN GUI MỚI XUẤT HIỆN", -32, function()
+    local plg = LP:FindFirstChild("PlayerGui")
+    if not plg then return end
+    for _, g in ipairs(plg:GetChildren()) do
+        if g:IsA("ScreenGui") and not KnownGuis[g] and g.Enabled then
+            KnownGuis[g] = true
+            local imgbtn, textbtn = 0, 0
+            for _, c in ipairs(g:GetDescendants()) do
+                if c:IsA("ImageButton") then imgbtn = imgbtn + 1 end
+                if c:IsA("TextButton") then textbtn = textbtn + 1 end
+            end
+            addLog(("[GUI] %s Img=%d Txt=%d"):format(g.Name, imgbtn, textbtn))
+        end
+    end
+end)
+
+mkBtn("CLOSE", -2, function() gui:Destroy() end)
+
+-- Auto scan mỗi 1s
+spawn(function()
+    while gui.Parent do
+        task.wait(1)
+        local plg = LP:FindFirstChild("PlayerGui")
+        if plg then
+            for _, g in ipairs(plg:GetChildren()) do
+                if g:IsA("ScreenGui") and not KnownGuis[g] and g.Enabled then
+                    KnownGuis[g] = true
+                    local imgbtn = 0
+                    for _, c in ipairs(g:GetDescendants()) do
+                        if c:IsA("ImageButton") then imgbtn = imgbtn + 1 end
+                    end
+                    if imgbtn >= 12 then
+                        addLog(("[PUZZLE?] %s  Img=%d"):format(g.Name, imgbtn))
                     end
                 end
             end
         end
     end
+end)
 
-    log("\n=== NEARBY REMOTES ===")
-    local root = playBtn
-    for _ = 1, 3 do if root.Parent then root = root.Parent end end
-    for _, obj in ipairs(root:GetDescendants()) do
-        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-            log("  " .. obj.ClassName .. " : " .. obj.Name)
-        end
-    end
-
-    log("\n=== LIKELY PLAY REMOTES (RS) ===")
-    local kws = {"play","load","spawn","ready","enter","start","begin","join"}
-    for _, obj in ipairs(RS:GetDescendants()) do
-        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-            local n = obj.Name:lower()
-            for _, kw in ipairs(kws) do
-                if n:find(kw) then
-                    log("  " .. obj.ClassName .. " : " .. obj:GetFullName())
-                    break
+-- Auto log trace
+spawn(function()
+    local last = 0
+    while gui.Parent do
+        task.wait(0.3)
+        if #TraceLog > last then
+            for i = last + 1, #TraceLog do
+                local e = TraceLog[i]
+                local argS = ""
+                for _, a in ipairs(e.args) do
+                    argS = argS .. tostring(a) .. " "
                 end
+                addLog(e.remote .. "  [" .. argS .. "]")
             end
+            last = #TraceLog
         end
-    end
-end
-
---======================================================================
--- GUI HIỆN KẾT QUẢ
---======================================================================
-local gui = Instance.new("ScreenGui")
-gui.Name = "TonKiDumpGui"
-gui.ResetOnSpawn = false
-gui.Parent = CG
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(1, 0, 1, 0)
-frame.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
-frame.BorderSizePixel = 0
-frame.Parent = gui
-
-local btn = Instance.new("TextButton")
-btn.Size = UDim2.new(0, 80, 0, 32)
-btn.Position = UDim2.new(1, -90, 0, 10)
-btn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-btn.Text = "ĐÓNG"
-btn.TextColor3 = Color3.new(1,1,1)
-btn.Font = Enum.Font.GothamBold
-btn.TextSize = 14
-btn.Parent = frame
-btn.MouseButton1Click:Connect(function() gui:Destroy() end)
-
-local copyBtn = Instance.new("TextButton")
-copyBtn.Size = UDim2.new(0, 120, 0, 32)
-copyBtn.Position = UDim2.new(1, -220, 0, 10)
-copyBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-copyBtn.Text = "COPY"
-copyBtn.TextColor3 = Color3.new(1,1,1)
-copyBtn.Font = Enum.Font.GothamBold
-copyBtn.TextSize = 14
-copyBtn.Parent = frame
-
-local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -20, 1, -60)
-scroll.Position = UDim2.new(0, 10, 0, 50)
-scroll.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-scroll.BorderSizePixel = 0
-scroll.ScrollBarThickness = 8
-scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-scroll.Parent = frame
-
-local layout = Instance.new("UIListLayout")
-layout.Parent = scroll
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Padding = UDim.new(0, 2)
-
-local result = table.concat(OUT, "\n")
-for i, line in ipairs(OUT) do
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -10, 0, 18)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = line
-    lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Font = Enum.Font.Code
-    lbl.TextSize = 12
-    lbl.TextWrapped = false
-    lbl.LayoutOrder = i
-    lbl.Parent = scroll
-end
-
-copyBtn.MouseButton1Click:Connect(function()
-    if setclipboard then
-        pcall(function() setclipboard(result) end)
-        copyBtn.Text = "COPIED!"
-        task.wait(1)
-        copyBtn.Text = "COPY"
-    else
-        copyBtn.Text = "NO CLIP"
-        task.wait(1)
-        copyBtn.Text = "COPY"
     end
 end)
 
-if setclipboard then
-    pcall(function() setclipboard(result) end)
-    print("[TonKi Hub] Đã copy kết quả vào clipboard.")
-end
+pcall(function()
+    SG:SetCore("SendNotification", {Title="TonKi", Text="Detector chạy. Nhận quest sea beast rồi ấn tile.", Duration=4})
+end)
 
-return result
+return TraceLog
