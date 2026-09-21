@@ -1,134 +1,126 @@
 --[[
-    ████████╗ ██████╗ ███╗   ██╗██╗  ██╗██╗    ██╗  ██╗██╗   ██╗██████╗ 
-    ╚══██╔══╝██╔═══██╗████╗  ██║██║ ██╔╝██║    ██║  ██║██║   ██║██╔══██╗
-       ██║   ██║   ██║██╔██╗ ██║█████╔╝ ██║    ███████║██║   ██║██████╔╝
-       ██║   ██║   ██║██║╚██╗██║██╔═██╗ ██║    ██╔══██║██║   ██║██╔══██╗
-       ██║   ╚██████╔╝██║ ╚████║██║  ██╗██║    ██║  ██║╚██████╔╝██████╔╝
-       ╚═╝    ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝    ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ 
-    
-    TonKi Hub — King Legacy
-    Author: Tonki29  |  Engine: [BaKhi]
-    
-    >> ĐỔI ẢNH NỀN MENU:
-       - Upload ảnh của bạn lên Roblox (Create > Decals), copy Asset ID
-       - Thay số ở biến BACKGROUND_IMAGE_ID bên dưới (chỉ số, không cần 'rbxassetid://')
+    ╔══════════════════════════════════════════════════════════╗
+    ║                    T O N K I   H U B                     ║
+    ║                 King Legacy  •  v2.0                     ║
+    ║              Fix UI + Farm + Dungeon + Multi-weapon      ║
+    ╚══════════════════════════════════════════════════════════╝
+
+    >> ĐỔI ẢNH MENU:
+       Upload ảnh của bạn lên Roblox -> Create -> Decal -> lấy ID
+       Rồi đổi biến BACKGROUND_IMAGE_ID bên dưới thành số ID đó.
 ]]
 
---======================================================================
--- SERVICES
---======================================================================
-local Players       = game:GetService("Players")
-local RunService    = game:GetService("RunService")
-local UIS           = game:GetService("UserInputService")
-local RS            = game:GetService("ReplicatedStorage")
-local HttpService   = game:GetService("HttpService")
-local TPS           = game:GetService("TeleportService")
-local VIM           = game:GetService("VirtualInputManager")
-local StarterGui    = game:GetService("StarterGui")
-local CoreGui       = game:GetService("CoreGui")
-local LP            = Players.LocalPlayer
+local BACKGROUND_IMAGE_ID = 0   -- <-- THAY asset id ảnh của bạn
 
 --======================================================================
--- CONFIG / STATE
---======================================================================
-local BACKGROUND_IMAGE_ID = 0  -- <-- THAY bằng asset id ảnh của bạn
+local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS        = game:GetService("UserInputService")
+local RS         = game:GetService("ReplicatedStorage")
+local Http       = game:GetService("HttpService")
+local TPS        = game:GetService("TeleportService")
+local VIM        = game:GetService("VirtualInputManager")
+local SG         = game:GetService("StarterGui")
+local CG         = game:GetService("CoreGui")
+local LP         = Players.LocalPlayer
+local Cam        = workspace.CurrentCamera
 
+--======================================================================
+-- CONFIG
+--======================================================================
 local Config = {
-    -- Auto
-    AutoFarmLevel     = false,
-    AutoFarmNear      = false,
-    AutoFarmBoss      = false,
-    AutoScanBoss      = false,
-    AutoSeaEvent      = false,
-    AutoSetSail       = false,
-    AutoDungeon       = false,
-    AutoDungeonV2     = false,
-    AutoFish          = false,
+    -- Farm
+    AutoFarmLevel   = false,
+    AutoFarmNear    = false,
+    AutoFarmBoss    = false,
+    AutoScanBoss    = false,
+    AutoMaterial    = false,
+    AutoSeaEvent    = false,
+    AutoSetSail     = false,
+    AutoDungeon     = false,
+    AutoDungeonV2   = false,
+    AutoFish        = false,
 
-    -- Skill toggles
-    SkillZ = true, SkillX = true, SkillC = true, SkillV = true,
-    SkillF = true, SkillB = true, SkillE = true,
-    AutoBuso = true, AutoKen = true, AutoHao = false,
-
-    -- Player
-    InfJump = false, SpeedHack = false, WalkOnWater = false,
-    CameraLock = false, NoClip = false,
-
-    -- Values
-    SpeedValue      = 60,
+    -- Movement
+    FarmPosMode     = "Above",   -- Above / Behind / Underground / Direct
+    FarmHeight      = 25,
+    OrbitSpeed      = 2,
+    OrbitRadius     = 15,
     MobDistance     = 500,
     FarmDistance    = 25,
-    SkillDistance   = 8,
-    HealthPercent   = 50,
-    FruitCD         = 12,
+    SkillDistance   = 12,
 
-    -- Priority
-    PriorityMode    = true, -- ưu tiên sea event > set sail > boss > material > lv
+    -- Weapon methods (multi-select)
+    MethodMelee     = true,
+    MethodSword     = false,
+    MethodFruit     = false,
+    WeaponSwapSpeed = 0.4,
+    SelectedSword   = "Sword",
 
-    -- Dungeon
-    DungeonMode     = "Easy",
-    SelectedSword   = nil,
+    -- Skills
+    SkillZ = true, SkillX = true, SkillC = true, SkillV = true,
+    SkillF = true, SkillB = true, SkillE = true,
+    AutoBuso = true, AutoKen = true,
+    AutoAim = true,
+
+    -- Player
+    InfJump = false, SpeedHack = false, SpeedValue = 60,
+    WalkOnWater = false, CameraLock = false, NoClip = false,
+
+    -- Combat
+    HealthPercent = 50,
+    FruitCD = 12,
+
+    -- Misc
+    DungeonMode = "Easy",
+    PriorityMode = true,
 }
 
 local State = {
-    QuestTaken      = false,
-    QuestInfo       = nil,
-    AimPos          = nil,
-    CurrentTarget   = nil,
-    DungeonActive   = false,
-    InRaid          = false,
-    LastFruitZ      = 0,
-    TargetMob       = nil,
-    CameraLockPos   = nil,
-    ScannedMobs     = {},
-    ScannedBosses   = {},
-    ScannedTimer    = 0,
-    HakiBusy        = false,
+    QuestTaken = false, QuestInfo = nil,
+    AimPos = nil, AimPosRaw = nil,
+    TargetMob = nil, Scanned = {},
+    ScannedBosses = {}, ScanTick = 0,
+    LastFruitZ = 0, LastSwap = 0, SwapIdx = 1,
+    OrbitAngle = 0, InRaid = false, HakiBusy = false,
+    AppliedPos = nil,
 }
 
 --======================================================================
 -- SAVE / LOAD
 --======================================================================
 local FOLDER = "TonKiHub"
-if not isfolder(FOLDER) then pcall(makefolder, FOLDER) end
-local SAVE_FILE = FOLDER .. "/config.json"
-
-local function SaveConfig()
-    if not writefile then return end
-    pcall(function() writefile(SAVE_FILE, HttpService:JSONEncode(Config)) end)
+pcall(function() if not isfolder(FOLDER) then makefolder(FOLDER) end end)
+local SAVE = FOLDER .. "/config.json"
+local function Save()
+    pcall(function() if writefile then writefile(SAVE, Http:JSONEncode(Config)) end end)
 end
-
-local function LoadConfig()
-    if not (isfile and isfile(SAVE_FILE)) then return end
+local function Load()
     pcall(function()
-        local d = HttpService:JSONDecode(readfile(SAVE_FILE))
-        for k, v in pairs(d) do Config[k] = v end
+        if isfile and isfile(SAVE) then
+            local d = Http:JSONDecode(readfile(SAVE))
+            for k,v in pairs(d) do Config[k] = v end
+        end
     end)
 end
-LoadConfig()
+Load()
 
 --======================================================================
 -- UTILS
 --======================================================================
-local function notif(t, txt, d)
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {Title=t, Text=txt, Duration=d or 3})
-    end)
+local function notif(t, s, d)
+    pcall(function() SG:SetCore("SendNotification", {Title=t, Text=s, Duration=d or 3}) end)
 end
-
-local function Char()  return LP.Character or LP.CharacterAdded:Wait() end
-local function HRP()   local c = Char() return c and c:FindFirstChild("HumanoidRootPart") end
-local function Hum()   local c = Char() return c and c:FindFirstChildOfClass("Humanoid") end
-local function Pos()   local h = HRP() return h and h.Position or Vector3.zero end
+local function Char() return LP.Character or LP.CharacterAdded:Wait() end
+local function HRP()  local c = Char() return c and c:FindFirstChild("HumanoidRootPart") end
+local function Hum()  local c = Char() return c and c:FindFirstChildOfClass("Humanoid") end
+local function Pos()  local h = HRP() return h and h.Position or Vector3.zero end
 local function Dist(p) return (p - Pos()).Magnitude end
-local function TP(cf)  local h = HRP() if h then h.CFrame = cf end end
-
+local function TP(cf) local h = HRP() if h then h.CFrame = cf end end
 local function Key(k)
-    VIM:SendKeyEvent(true, k, false, game)
-    task.wait(0.02)
+    VIM:SendKeyEvent(true, k, false, game); task.wait(0.02)
     VIM:SendKeyEvent(false, k, false, game)
 end
-
 local function IsPlayer(obj)
     for _, pl in ipairs(Players:GetPlayers()) do
         if pl ~= LP and pl.Character and (obj == pl.Character or obj:IsDescendantOf(pl.Character)) then
@@ -137,109 +129,102 @@ local function IsPlayer(obj)
     end
     return false
 end
+local function parseLv(name)
+    local lv = name:match("Lv%.%s*(%d+)")
+    return tonumber(lv)
+end
 
 --======================================================================
--- QUEST
+-- QUEST TABLE
 --======================================================================
-local QUEST_TABLE = {
-    {1,   9,   1,    "Kill 4 Soldiers",             -1860, 50,  -4489},
-    {10,  19,  10,   "Kill 5 Clown Pirates",        -1860, 50,  -4489},
-    {20,  29,  20,   "Kill 1 Smoky",                -2065, 99,  -4686},
-    {30,  49,  30,   "Kill 1 Tashi",                -2270, 109, -4548},
-    {50,  74,  50,   "Kill 6 Clown Swordman",       -764,  97,  -3546},
-    {75,  99,  75,   "Kill 1 The Clown",            -397,  114, -3436},
-    {100, 119, 100,  "Kill 4 Commander",            -2122, 92,  -2549},
-    {120, 144, 120,  "Kill 1 Captain",              -2122, 92,  -2549},
-    {145, 179, 145,  "Kill 1 The Barbaric",         -2375, 139, -2419},
-    {180, 199, 180,  "Kill 4 Fighter Fishmans",     -856,  52,  -1422},
-    {200, 229, 200,  "Kill 1 Karate Fishman",       -856,  52,  -1422},
-    {230, 249, 230,  "Kill 1 Shark Man",            -666,  56,  -1493},
-    {250, 299, 250,  "Kill 4 Trainer Chef",         -4217, 162, -2899},
-    {300, 349, 300,  "Kill 1 Dark Leg",             -4217, 162, -2899},
-    {350, 399, 350,  "Kill 1 Dory",                 -4217, 162, -2899},
-    {400, 449, 400,  "Kill 5 Snow Soldier",         -5310, 65,  -1275},
-    {450, 499, 450,  "Kill 1 King Snow",            -5519, 40,  -1557},
-    {500, 524, 500,  "Kill 1 Little Dear",          -5467, 55,  -1104},
-    {525, 574, 525,  "Kill 1 Candle Man",           -2956, 92,  -602},
-    {575, 624, 575,  "Kill 4 Sand Bandit",          -2750, 73,  -777},
-    {625, 674, 625,  "Kill 1 Bomb Man",             -2956, 92,  -602},
-    {675, 724, 675,  "Kill 4 Desert Marauder",      -2750, 73,  -777},
-    {725, 799, 725,  "Kill 1 King of Sand",         -3021, 92,  -545},
-    {800, 849, 800,  "Kill 4 Sky Soldier",          -4589, 222, 1151},
-    {850, 899, 850,  "Kill 1 Ball Man",             -4076, 433, 1344},
-    {900, 949, 900,  "Kill 4 Cloud Warrior",        -4589, 222, 1151},
-    {950, 999, 950,  "Kill 1 Rumble Man",           -4076, 433, 1344},
-    {1000,1049,1000, "Kill 4 Elite Soldiers",       1897,  12,  749},
-    {1050,1099,1050, "Kill 4 High-class Soldier",   1897,  12,  749},
-    {1100,1149,1100, "Kill 1 Leader",               1897,  12,  749},
-    {1150,1199,1150, "Kill 1 Pasta",                1523,  27,  1167},
-    {1200,1249,1200, "Kill 4 Naval personnel",      -1308, 69,  2148},
-    {1250,1299,1250, "Kill 1 Wolf",                 -1308, 69,  2148},
-    {1300,1349,1300, "Kill 1 Giraffe",              -1204, 69,  2100},
-    {1350,1399,1350, "Kill 4 Nautical soldier",     -1204, 69,  2100},
-    {1400,1449,1400, "Kill 4 Naval soldier",        -1256, 167, 2585},
-    {1450,1499,1450, "Kill 1 Leo",                  -1256, 167, 2585},
-    {1500,1549,1500, "Kill 5 Zombies",              -2789, 16,  4188},
-    {1550,1599,1550, "Kill 4 Elite Zombies",        -2789, 16,  4188},
-    {1600,1649,1600, "Kill 4 Revenant",             -2849, 20,  4319},
-    {1650,1699,1650, "Kill 1 Shadow Master",        -2849, 20,  4319},
-    {1700,1749,1700, "Kill 4 New World Pirates",    2153,  109, -1587},
-    {1750,1799,1750, "Kill 4 Cutlass Pirates",      2391,  80,  -1982},
-    {1800,1849,1800, "Kill 4 Rear Admirals",        2410,  109, -2228},
-    {1850,1924,1850, "Kill 1 True Karate Fishman",  2471,  103, -1938},
-    {1925,1999,1925, "Kill 1 Quake Woman",          2285,  49,  -1908},
-    {2000,2049,2000, "Kill 4 Fishmans",             -1743, 40,  6198},
-    {2050,2099,2050, "Kill 1 Combat Fishman",       -1956, 55,  6236},
-    {2100,2149,2100, "Kill 1 Sword Fishman",        -1635, 96,  6688},
-    {2150,2199,2150, "Kill 4 Soldier Fishman",      -1801, 40,  6451},
-    {2200,99999999,2200, "Kill 1 Seasoned Fishman", -1801, 40,  6451},
+local QUEST = {
+    {1,9,1,"Kill 4 Soldiers",-1860,50,-4489},
+    {10,19,10,"Kill 5 Clown Pirates",-1860,50,-4489},
+    {20,29,20,"Kill 1 Smoky",-2065,99,-4686},
+    {30,49,30,"Kill 1 Tashi",-2270,109,-4548},
+    {50,74,50,"Kill 6 Clown Swordman",-764,97,-3546},
+    {75,99,75,"Kill 1 The Clown",-397,114,-3436},
+    {100,119,100,"Kill 4 Commander",-2122,92,-2549},
+    {120,144,120,"Kill 1 Captain",-2122,92,-2549},
+    {145,179,145,"Kill 1 The Barbaric",-2375,139,-2419},
+    {180,199,180,"Kill 4 Fighter Fishmans",-856,52,-1422},
+    {200,229,200,"Kill 1 Karate Fishman",-856,52,-1422},
+    {230,249,230,"Kill 1 Shark Man",-666,56,-1493},
+    {250,299,250,"Kill 4 Trainer Chef",-4217,162,-2899},
+    {300,349,300,"Kill 1 Dark Leg",-4217,162,-2899},
+    {350,399,350,"Kill 1 Dory",-4217,162,-2899},
+    {400,449,400,"Kill 5 Snow Soldier",-5310,65,-1275},
+    {450,499,450,"Kill 1 King Snow",-5519,40,-1557},
+    {500,524,500,"Kill 1 Little Dear",-5467,55,-1104},
+    {525,574,525,"Kill 1 Candle Man",-2956,92,-602},
+    {575,624,575,"Kill 4 Sand Bandit",-2750,73,-777},
+    {625,674,625,"Kill 1 Bomb Man",-2956,92,-602},
+    {675,724,675,"Kill 4 Desert Marauder",-2750,73,-777},
+    {725,799,725,"Kill 1 King of Sand",-3021,92,-545},
+    {800,849,800,"Kill 4 Sky Soldier",-4589,222,1151},
+    {850,899,850,"Kill 1 Ball Man",-4076,433,1344},
+    {900,949,900,"Kill 4 Cloud Warrior",-4589,222,1151},
+    {950,999,950,"Kill 1 Rumble Man",-4076,433,1344},
+    {1000,1049,1000,"Kill 4 Elite Soldiers",1897,12,749},
+    {1050,1099,1050,"Kill 4 High-class Soldier",1897,12,749},
+    {1100,1149,1100,"Kill 1 Leader",1897,12,749},
+    {1150,1199,1150,"Kill 1 Pasta",1523,27,1167},
+    {1200,1249,1200,"Kill 4 Naval personnel",-1308,69,2148},
+    {1250,1299,1250,"Kill 1 Wolf",-1308,69,2148},
+    {1300,1349,1300,"Kill 1 Giraffe",-1204,69,2100},
+    {1350,1399,1350,"Kill 4 Nautical soldier",-1204,69,2100},
+    {1400,1449,1400,"Kill 4 Naval soldier",-1256,167,2585},
+    {1450,1499,1450,"Kill 1 Leo",-1256,167,2585},
+    {1500,1549,1500,"Kill 5 Zombies",-2789,16,4188},
+    {1550,1599,1550,"Kill 4 Elite Zombies",-2789,16,4188},
+    {1600,1649,1600,"Kill 4 Revenant",-2849,20,4319},
+    {1650,1699,1650,"Kill 1 Shadow Master",-2849,20,4319},
+    {1700,1749,1700,"Kill 4 New World Pirates",2153,109,-1587},
+    {1750,1799,1750,"Kill 4 Cutlass Pirates",2391,80,-1982},
+    {1800,1849,1800,"Kill 4 Rear Admirals",2410,109,-2228},
+    {1850,1924,1850,"Kill 1 True Karate Fishman",2471,103,-1938},
+    {1925,1999,1925,"Kill 1 Quake Woman",2285,49,-1908},
+    {2000,2049,2000,"Kill 4 Fishmans",-1743,40,6198},
+    {2050,2099,2050,"Kill 1 Combat Fishman",-1956,55,6236},
+    {2100,2149,2100,"Kill 1 Sword Fishman",-1635,96,6688},
+    {2150,2199,2150,"Kill 4 Soldier Fishman",-1801,40,6451},
+    {2200,9999999,2200,"Kill 1 Seasoned Fishman",-1801,40,6451},
 }
 
-local function GetLevel()
+local function Lv()
     local ps = LP:FindFirstChild("PlayerStats")
-    if ps and ps:FindFirstChild("lvl") then return ps.lvl.Value end
-    return 1
+    return (ps and ps:FindFirstChild("lvl")) and ps.lvl.Value or 1
 end
-
 local function FindQuest()
-    local lv = GetLevel()
-    for _, q in ipairs(QUEST_TABLE) do
-        if lv >= q[1] and lv <= q[2] then return q end
-    end
+    local l = Lv()
+    for _,q in ipairs(QUEST) do if l >= q[1] and l <= q[2] then return q end end
 end
-
-local function TakeQuest(name)
+local function TakeQuest(n)
     pcall(function()
-        RS.Chest.Remotes.Functions.Quest:InvokeServer("take", name)
+        RS.Chest.Remotes.Functions.Quest:InvokeServer("take", n)
         State.QuestTaken = true
     end)
 end
 
 --======================================================================
--- SCAN MOBS / BOSSES (KHÔNG QUÉT PLAYER)
+-- SCAN
 --======================================================================
-local function parseLevel(name)
-    local lv = name:match("Lv%.%s*(%d+)")
-    return tonumber(lv)
-end
-
-local function ScanMobs(filterLevel)
-    local list = {}
+local function ScanMobs(filterLv)
+    local out = {}
     local mf = workspace:FindFirstChild("Monster")
-    if not mf then return list end
+    if not mf then return out end
     for _, folder in ipairs(mf:GetChildren()) do
         if folder:IsA("Folder") and not IsPlayer(folder) then
-            for _, mob in ipairs(folder:GetChildren()) do
-                if mob:IsA("Model") and not IsPlayer(mob) then
-                    local hum = mob:FindFirstChildOfClass("Humanoid")
-                    local hrp = mob:FindFirstChild("HumanoidRootPart")
-                    if hum and hrp and hum.Health > 0 then
-                        local lv = parseLevel(mob.Name)
-                        if lv and (not filterLevel or lv == filterLevel) then
-                            table.insert(list, {
-                                model = mob, hrp = hrp, hum = hum,
-                                level = lv, name = mob.Name,
-                                dist = Dist(hrp.Position)
+            for _, m in ipairs(folder:GetChildren()) do
+                if m:IsA("Model") and not IsPlayer(m) then
+                    local h = m:FindFirstChildOfClass("Humanoid")
+                    local hrp = m:FindFirstChild("HumanoidRootPart")
+                    if h and hrp and h.Health > 0 then
+                        local lv = parseLv(m.Name)
+                        if lv and (not filterLv or lv == filterLv) then
+                            table.insert(out, {
+                                model=m, hrp=hrp, hum=h, name=m.Name,
+                                level=lv, dist=Dist(hrp.Position)
                             })
                         end
                     end
@@ -247,42 +232,39 @@ local function ScanMobs(filterLevel)
             end
         end
     end
-    table.sort(list, function(a,b) return a.dist < b.dist end)
-    return list
+    table.sort(out, function(a,b) return a.dist < b.dist end)
+    return out
 end
 
+local BOSS_KW = {
+    "Smoky","Tashi","Clown","Captain","Barbaric","Karate Fishman","Shark Man",
+    "Dark Leg","King Snow","Little Dear","Bomb Man","King of Sand","Ball Man",
+    "Rumble Man","Leader","Pasta","Wolf","Giraffe","Leo","Shadow Master",
+    "True Karate Fishman","Quake Woman","Combat Fishman","Sword Fishman",
+    "Seasoned Fishman","Gazelle","Violet Samurai","Duke","Magician","Kitsune",
+    "Bear Man","Bean","Meji","Petra","Kappa","Joey","Elite Skeleton",
+    "Desert Thief","Anubis","Pharaoh","Sunken Vessel","Biscuit Man","Dough Master",
+    "Supreme Swordman","Sally","Pondere","Hefty","Lomeo","Prince Aria","Devastate",
+    "Floffy","Ryu","Fugitive","Deep One","Cyborg Gorilla","Ripcurrent","Tidal",
+    "Ocean Gladiator","Electro Abyss","Inferno Diver","Tempest","Abyssal",
+    "Prisoner of Gravity","Warden","Craberno","Chaos Crab"
+}
 local function ScanBosses()
-    -- Quét toàn bộ folder Monster, chỉ lấy mob có tên là boss
-    local list = {}
+    local out = {}
     local mf = workspace:FindFirstChild("Monster")
-    if not mf then return list end
-    local BOSS_KEYWORDS = {
-        "Smoky","Tashi","Clown","Captain","Barbaric","Karate Fishman","Shark Man",
-        "Dark Leg","King Snow","Little Dear","Bomb Man","King of Sand","Ball Man",
-        "Rumble Man","Leader","Pasta","Wolf","Giraffe","Leo","Shadow Master",
-        "True Karate Fishman","Quake Woman","Combat Fishman","Sword Fishman",
-        "Seasoned Fishman","Gazelle","Violet Samurai","Duke","Magician","Kitsune",
-        "Bear Man","Bean","Meji","Petra","Kappa","Joey","Elite Skeleton",
-        "Desert Thief","Anubis","Pharaoh","Sunken Vessel","Biscuit Man","Dough Master",
-        "Supreme Swordman","Sally","Pondere","Hefty","Lomeo","Prince Aria","Devastate",
-        "Floffy","Ryu","Fugitive","Deep One","Cyborg Gorilla","Ripcurrent","Tidal",
-        "Ocean Gladiator","Electro Abyss","Inferno Diver","Tempest","Abyssal",
-        "Prisoner of Gravity",
-    }
+    if not mf then return out end
     for _, folder in ipairs(mf:GetChildren()) do
         if folder:IsA("Folder") and not IsPlayer(folder) then
-            for _, mob in ipairs(folder:GetChildren()) do
-                if mob:IsA("Model") and not IsPlayer(mob) then
-                    local hum = mob:FindFirstChildOfClass("Humanoid")
-                    local hrp = mob:FindFirstChild("HumanoidRootPart")
-                    if hum and hrp and hum.Health > 0 then
-                        for _, kw in ipairs(BOSS_KEYWORDS) do
-                            if mob.Name:find(kw) then
-                                table.insert(list, {
-                                    model = mob, hrp = hrp, hum = hum,
-                                    level = parseLevel(mob.Name) or 0,
-                                    name = mob.Name,
-                                    dist = Dist(hrp.Position)
+            for _, m in ipairs(folder:GetChildren()) do
+                if m:IsA("Model") and not IsPlayer(m) then
+                    local h = m:FindFirstChildOfClass("Humanoid")
+                    local hrp = m:FindFirstChild("HumanoidRootPart")
+                    if h and hrp and h.Health > 0 then
+                        for _, kw in ipairs(BOSS_KW) do
+                            if m.Name:find(kw) then
+                                table.insert(out, {
+                                    model=m, hrp=hrp, hum=h, name=m.Name,
+                                    level=parseLv(m.Name) or 0, dist=Dist(hrp.Position)
                                 })
                                 break
                             end
@@ -292,30 +274,46 @@ local function ScanBosses()
             end
         end
     end
-    table.sort(list, function(a,b) return a.dist < b.dist end)
-    return list
+    table.sort(out, function(a,b) return a.dist < b.dist end)
+    return out
 end
 
 --======================================================================
--- SKILL / COMBAT
+-- COMBAT HELPERS
 --======================================================================
-local function AimAt(pos)
-    State.AimPos = pos and CFrame.new(pos) or nil
-    State.AimPosRaw = pos
+local function EquipByName(name)
+    local c = Char()
+    for _, t in ipairs(c:GetChildren()) do
+        if t:IsA("Tool") and t.Name == name then return true end
+    end
+    local bp = LP:FindFirstChildOfClass("Backpack")
+    if bp then
+        for _, t in ipairs(bp:GetChildren()) do
+            if t:IsA("Tool") and t.Name == name then
+                pcall(function() Hum():EquipTool(t) end)
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function CurrentTool()
+    local c = Char()
+    for _, t in ipairs(c:GetChildren()) do
+        if t:IsA("Tool") then return t end
+    end
 end
 
 local function ClickMob()
-    local char = Char()
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") then
-            local hit = State.AimPos or (HRP() and HRP().CFrame)
-            for _, prefix in ipairs({"FS_", "SW_", "DF_", "GH_"}) do
-                local args = { prefix .. tool.Name .. "_M1", { MouseHit = hit } }
-                pcall(function()
-                    RS.Chest.Remotes.Functions.SkillAction:InvokeServer(unpack(args))
-                end)
-            end
-        end
+    local tool = CurrentTool()
+    if not tool then return end
+    local hit = State.AimPos or (HRP() and HRP().CFrame)
+    for _, prefix in ipairs({"FS_","SW_","DF_","GH_"}) do
+        pcall(function()
+            RS.Chest.Remotes.Functions.SkillAction:InvokeServer(
+                prefix .. tool.Name .. "_M1", {MouseHit = hit})
+        end)
     end
 end
 
@@ -329,23 +327,37 @@ local function UseSkills()
     if Config.SkillE then Key("E") end
 end
 
-local function EquipToolByName(name)
-    local char = Char()
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") and tool.Name == name then return true end
+-- Rotate through enabled weapon methods
+local function RotateWeapon()
+    if tick() - State.LastSwap < Config.WeaponSwapSpeed then return end
+    State.LastSwap = tick()
+
+    local list = {}
+    if Config.MethodMelee  then table.insert(list, "Combat") end
+    if Config.MethodFruit  then table.insert(list, "Fruit Power") end
+    if Config.MethodSword  then
+        -- Ưu tiên sword đang chọn, fallback "Sword"
+        table.insert(list, Config.SelectedSword or "Sword")
     end
-    local bp = LP:FindFirstChildOfClass("Backpack")
-    if bp then
-        for _, tool in ipairs(bp:GetChildren()) do
-            if tool:IsA("Tool") and tool.Name == name then
-                pcall(function()
-                    Hum():EquipTool(tool)
-                end)
-                return true
-            end
-        end
+    if #list == 0 then return end
+    State.SwapIdx = (State.SwapIdx % #list) + 1
+    EquipByName(list[State.SwapIdx])
+end
+
+-- Position calculation
+local function ComputeFarmCFrame(mobPos)
+    local mode = Config.FarmPosMode
+    if mode == "Above" then
+        return CFrame.lookAt(mobPos + Vector3.new(0, Config.FarmHeight, 0), mobPos)
+    elseif mode == "Underground" then
+        return CFrame.lookAt(mobPos + Vector3.new(0, -Config.FarmHeight, 0), mobPos)
+    elseif mode == "Behind" then
+        local rad = math.rad(State.OrbitAngle)
+        local off = Vector3.new(math.cos(rad), 0, math.sin(rad)) * Config.OrbitRadius
+        return CFrame.lookAt(mobPos + off + Vector3.new(0, Config.FarmHeight, 0), mobPos)
+    else -- Direct
+        return CFrame.lookAt(mobPos + Vector3.new(0, 3, 0), mobPos)
     end
-    return false
 end
 
 --======================================================================
@@ -356,630 +368,615 @@ local function UseBuso()
     State.HakiBusy = true
     pcall(function()
         local svc = workspace.PlayerCharacters[LP.Name].Services
-        if svc and svc:FindFirstChild("Haki") and svc.Haki.Value == 0 then
-            RS.Chest.Remotes.Events.Armament:FireServer()
-        end
+        if svc.Haki.Value == 0 then RS.Chest.Remotes.Events.Armament:FireServer() end
     end)
     task.wait(0.3)
     State.HakiBusy = false
 end
-
 local function UseKen()
     pcall(function()
         local svc = workspace.PlayerCharacters[LP.Name].Services
-        if svc and svc:FindFirstChild("KenOpen") and svc.KenOpen.Value == false then
+        if svc.KenOpen.Value == false then
             RS.Chest.Remotes.Functions.KenEvent:InvokeServer()
         end
     end)
 end
 
 --======================================================================
--- ============== UI (TONKI HUB) ==============
+-- DUNGEON
+--======================================================================
+local function DungeonEntrance()
+    if game.PlaceId == 4520749081 then
+        return CFrame.new(-4610, 33, -6009)
+    elseif game.PlaceId == 6381829480 then
+        return CFrame.new(-2428, 57, -1566)
+    elseif game.PlaceId == 15759515082 then
+        return CFrame.new(10960, 133, 1250)
+    end
+end
+
+local function FireAllClicks(gui)
+    for _, sig in ipairs({"MouseButton1Up","MouseButton1Down","MouseButton1Click","Activated"}) do
+        local ok, conns = pcall(getconnections, gui[sig])
+        if ok then
+            for _, c in ipairs(conns) do
+                pcall(function() c:Fire() end)
+            end
+        end
+    end
+end
+
+local function TryEnterDungeon()
+    local plg = LP:FindFirstChild("PlayerGui")
+    if not plg then return end
+    if not plg:FindFirstChild("ChooseMap") then return end
+    local cm = plg.ChooseMap
+    local mapFrame = cm:FindFirstChild("ChooseMapFrame")
+    if not mapFrame then return end
+    local mf = mapFrame:FindFirstChild("MapFrame")
+    if not mf then return end
+    local mode = mf:FindFirstChild(Config.DungeonMode)
+    if not mode then return end
+    FireAllClicks(mode)
+    task.wait(0.3)
+    -- Try Play button
+    for _, gui in ipairs(plg:GetDescendants()) do
+        if gui:IsA("TextButton") and (gui.Text:lower():find("play") or gui.Text:lower():find("start")) then
+            FireAllClicks(gui)
+        end
+    end
+end
+
+--======================================================================
+-- ============== UI ==============
 --======================================================================
 local function New(class, props, parent)
-    local inst = Instance.new(class)
-    for k, v in pairs(props or {}) do inst[k] = v end
-    if parent then inst.Parent = parent end
-    return inst
+    local i = Instance.new(class)
+    for k,v in pairs(props or {}) do i[k] = v end
+    if parent then i.Parent = parent end
+    return i
+end
+local function Corner(p, r) return New("UICorner", {CornerRadius = UDim.new(0, r or 8)}, p) end
+local function Stroke(p, c, t)
+    return New("UIStroke", {Color=c or Color3.fromRGB(90,90,100), Thickness=t or 1,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, p)
 end
 
-local function Corner(parent, r)
-    return New("UICorner", {CornerRadius = UDim.new(0, r or 8)}, parent)
-end
-local function Stroke(parent, col, t)
-    return New("UIStroke", {Color = col or Color3.fromRGB(80, 80, 90), Thickness = t or 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, parent)
-end
-
+local parentGui = (pcall(function() return CG end) and CG) or LP:WaitForChild("PlayerGui")
 local Gui = New("ScreenGui", {
-    Name = "TonKiHub",
-    ResetOnSpawn = false,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    IgnoreGuiInset = true,
-}, (pcall(function() return game.CoreGui end) and CoreGui) or LP:WaitForChild("PlayerGui"))
+    Name = "TonKiHub", ResetOnSpawn=false,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset=true,
+}, parentGui)
 
 --======================================================================
--- TOGGLE BUTTON (kéo thả được)
+-- FLOATING TOGGLE BUTTON
 --======================================================================
 local ToggleBtn = New("TextButton", {
-    Parent = Gui,
-    Size = UDim2.new(0, 56, 0, 56),
-    Position = UDim2.new(0, 20, 0.4, 0),
-    BackgroundColor3 = Color3.fromRGB(18, 18, 22),
-    Text = "TK",
-    TextColor3 = Color3.fromRGB(240, 200, 90),
-    Font = Enum.Font.GothamBold,
-    TextSize = 22,
-    AutoButtonColor = false,
-    Active = true,
+    Parent = Gui, Size = UDim2.new(0,56,0,56), Position = UDim2.new(0,20,0.4,0),
+    BackgroundColor3 = Color3.fromRGB(18,18,22), Text = "TK",
+    TextColor3 = Color3.fromRGB(245,205,95), Font = Enum.Font.GothamBold,
+    TextSize = 22, AutoButtonColor = false, Active = true,
 })
 Corner(ToggleBtn, 28)
-Stroke(ToggleBtn, Color3.fromRGB(240, 200, 90), 2)
-local grad = New("UIGradient", {Rotation = 45}, ToggleBtn)
-grad.Color = ColorSequence.new{
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(30,25,15)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(15,15,20)),
-}
+Stroke(ToggleBtn, Color3.fromRGB(245,205,95), 2)
 
 --======================================================================
--- MAIN WINDOW (kéo thả + ảnh nền)
+-- MAIN WINDOW
 --======================================================================
 local Main = New("Frame", {
-    Parent = Gui,
-    Size = UDim2.new(0, 620, 0, 380),
-    Position = UDim2.new(0.5, -310, 0.5, -190),
-    BackgroundColor3 = Color3.fromRGB(12, 12, 15),
-    BorderSizePixel = 0,
-    Active = true,
-    Draggable = true,
-    ClipsDescendants = true,
-    Visible = false,
+    Parent = Gui, Size = UDim2.new(0,660,0,420),
+    Position = UDim2.new(0.5,-330,0.5,-210),
+    BackgroundColor3 = Color3.fromRGB(10,10,14), BorderSizePixel = 0,
+    Active = true, Draggable = true, ClipsDescendants = true, Visible = false,
 })
 Corner(Main, 12)
-Stroke(Main, Color3.fromRGB(240, 200, 90), 1.5)
+Stroke(Main, Color3.fromRGB(245,205,95), 1.5)
 
--- Ảnh nền menu
 if BACKGROUND_IMAGE_ID and BACKGROUND_IMAGE_ID > 0 then
-    local BG = New("ImageLabel", {
-        Parent = Main,
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
+    local bg = New("ImageLabel", {
+        Parent = Main, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1,
         Image = "rbxassetid://" .. tostring(BACKGROUND_IMAGE_ID),
-        ImageTransparency = 0.55,
-        ScaleType = Enum.ScaleType.Crop,
-        ZIndex = 0,
+        ImageTransparency = 0.5, ScaleType = Enum.ScaleType.Crop, ZIndex = 0,
     })
-    Corner(BG, 12)
-    -- Lớp tối phủ
-    local Overlay = New("Frame", {
+    Corner(bg, 12)
+    New("Frame", {
         Parent = Main, Size = UDim2.new(1,0,1,0),
-        BackgroundColor3 = Color3.fromRGB(0,0,0),
-        BackgroundTransparency = 0.35,
+        BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.35,
         BorderSizePixel = 0, ZIndex = 1,
     })
-    Corner(Overlay, 12)
 end
 
---======================================================================
 -- HEADER
---======================================================================
 local Header = New("Frame", {
-    Parent = Main,
-    Size = UDim2.new(1, 0, 0, 40),
-    BackgroundColor3 = Color3.fromRGB(10, 10, 14),
-    BackgroundTransparency = 0.15,
-    BorderSizePixel = 0,
-    ZIndex = 2,
+    Parent = Main, Size = UDim2.new(1,0,0,42),
+    BackgroundColor3 = Color3.fromRGB(14,14,18), BackgroundTransparency = 0.1,
+    BorderSizePixel = 0, ZIndex = 5,
 })
-Corner(Header, 12)
-
-local HeaderTitle = New("TextLabel", {
-    Parent = Header,
-    Size = UDim2.new(0.6, 0, 1, 0),
-    Position = UDim2.new(0, 16, 0, 0),
-    BackgroundTransparency = 1,
-    Text = "TonKi Hub  •  King Legacy",
-    TextColor3 = Color3.fromRGB(240, 200, 90),
-    Font = Enum.Font.GothamBold,
-    TextSize = 15,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 3,
+New("TextLabel", {
+    Parent = Header, Size = UDim2.new(0.7,0,1,0), Position = UDim2.new(0,16,0,0),
+    BackgroundTransparency = 1, Text = "◈  TONKI HUB  —  King Legacy",
+    TextColor3 = Color3.fromRGB(245,205,95), Font = Enum.Font.GothamBold,
+    TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
 })
-
 local CloseBtn = New("TextButton", {
-    Parent = Header,
-    Size = UDim2.new(0, 30, 0, 30),
-    Position = UDim2.new(1, -38, 0, 5),
-    BackgroundColor3 = Color3.fromRGB(30, 20, 20),
-    Text = "✕",
-    TextColor3 = Color3.fromRGB(255, 120, 120),
-    Font = Enum.Font.GothamBold,
-    TextSize = 16,
-    AutoButtonColor = false,
-    ZIndex = 3,
+    Parent = Header, Size = UDim2.new(0,30,0,30), Position = UDim2.new(1,-40,0,6),
+    BackgroundColor3 = Color3.fromRGB(40,20,20), Text = "✕",
+    TextColor3 = Color3.fromRGB(255,130,130), Font = Enum.Font.GothamBold,
+    TextSize = 16, AutoButtonColor = false, ZIndex = 6,
 })
 Corner(CloseBtn, 6)
-CloseBtn.MouseButton1Click:Connect(function()
-    Main.Visible = false
-end)
+CloseBtn.MouseButton1Click:Connect(function() Main.Visible = false end)
 
---======================================================================
--- TAB BAR
---======================================================================
+-- TAB BAR (left)
 local TabBar = New("ScrollingFrame", {
-    Parent = Main,
-    Size = UDim2.new(0, 140, 1, -40),
-    Position = UDim2.new(0, 0, 0, 40),
-    BackgroundColor3 = Color3.fromRGB(8, 8, 12),
-    BackgroundTransparency = 0.25,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 0,
-    CanvasSize = UDim2.new(0, 0, 0, 0),
-    ZIndex = 2,
+    Parent = Main, Size = UDim2.new(0,150,1,-42), Position = UDim2.new(0,0,0,42),
+    BackgroundColor3 = Color3.fromRGB(8,8,12), BackgroundTransparency = 0.2,
+    BorderSizePixel = 0, ScrollBarThickness = 0,
+    CanvasSize = UDim2.new(0,0,0,0), ZIndex = 3,
 })
-Corner(TabBar, 0)
+New("UIListLayout", {
+    Parent = TabBar, Padding = UDim.new(0,4),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    HorizontalAlignment = Enum.HorizontalAlignment.Center,
+})
+New("UIPadding", {Parent = TabBar,
+    PaddingTop = UDim.new(0,8), PaddingBottom = UDim.new(0,8)})
 
-local ContentArea = New("Frame", {
-    Parent = Main,
-    Size = UDim2.new(1, -140, 1, -40),
-    Position = UDim2.new(0, 140, 0, 40),
-    BackgroundTransparency = 1,
-    ZIndex = 2,
+-- Content area
+local Content = New("Frame", {
+    Parent = Main, Size = UDim2.new(1,-150,1,-42), Position = UDim2.new(0,150,0,42),
+    BackgroundTransparency = 1, ZIndex = 3,
 })
 
--- Pages container
+--======================================================================
+-- UI COMPONENTS
+--======================================================================
 local Pages = {}
-local TabButtons = {}
-local Y_OFFSET_TAB = 8
+local TabBtns = {}
 
-local function CreateTab(name, icon)
+local function MakeTab(name, icon)
     local btn = New("TextButton", {
-        Parent = TabBar,
-        Size = UDim2.new(1, -12, 0, 32),
-        Position = UDim2.new(0, 6, 0, Y_OFFSET_TAB),
-        BackgroundColor3 = Color3.fromRGB(20, 20, 26),
-        Text = "  " .. (icon or "") .. "  " .. name,
-        TextColor3 = Color3.fromRGB(200, 200, 210),
-        Font = Enum.Font.GothamMedium,
-        TextSize = 12,
+        Parent = TabBar, Size = UDim2.new(1,-12,0,34),
+        BackgroundColor3 = Color3.fromRGB(22,22,28),
+        Text = "  " .. icon .. "  " .. name,
+        TextColor3 = Color3.fromRGB(200,200,210),
+        Font = Enum.Font.GothamMedium, TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
         AutoButtonColor = false,
     })
     Corner(btn, 6)
-    Y_OFFSET_TAB = Y_OFFSET_TAB + 36
-
     local page = New("ScrollingFrame", {
-        Parent = ContentArea,
-        Size = UDim2.new(1, -20, 1, -20),
-        Position = UDim2.new(0, 10, 0, 10),
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        ScrollBarThickness = 3,
-        ScrollBarImageColor3 = Color3.fromRGB(240, 200, 90),
-        CanvasSize = UDim2.new(0, 0, 0, 0),
+        Parent = Content, Size = UDim2.new(1,-20,1,-20),
+        Position = UDim2.new(0,10,0,10),
+        BackgroundTransparency = 1, BorderSizePixel = 0,
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = Color3.fromRGB(245,205,95),
+        CanvasSize = UDim2.new(0,0,0,0),
         Visible = false,
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
     })
+    New("UIListLayout", {
+        Parent = page, Padding = UDim.new(0,6),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    })
+    New("UIPadding", {Parent = page,
+        PaddingTop = UDim.new(0,4), PaddingBottom = UDim.new(0,12),
+        PaddingLeft = UDim.new(0,4), PaddingRight = UDim.new(0,4)})
     Pages[name] = page
-    TabButtons[name] = btn
-
+    TabBtns[name] = btn
     btn.MouseButton1Click:Connect(function()
-        for n, p in pairs(Pages) do
+        for n,p in pairs(Pages) do
             p.Visible = (n == name)
-            TabButtons[n].BackgroundColor3 = (n == name)
-                and Color3.fromRGB(35, 30, 15) or Color3.fromRGB(20, 20, 26)
-            TabButtons[n].TextColor3 = (n == name)
-                and Color3.fromRGB(240, 200, 90) or Color3.fromRGB(200, 200, 210)
+            TabBtns[n].BackgroundColor3 = (n==name)
+                and Color3.fromRGB(40,34,18) or Color3.fromRGB(22,22,28)
+            TabBtns[n].TextColor3 = (n==name)
+                and Color3.fromRGB(245,205,95) or Color3.fromRGB(200,200,210)
         end
     end)
     return page
 end
 
---======================================================================
--- UI COMPONENTS
---======================================================================
-local Y = {}
-local function ResetY(name) Y[name] = 4 end
-
-local function Section(parent, name, title)
-    ResetY(name)
-    local lbl = New("TextLabel", {
-        Parent = parent,
-        Size = UDim2.new(1, -8, 0, 26),
-        Position = UDim2.new(0, 4, 0, Y[name]),
+local function Section(parent, title)
+    local f = New("Frame", {
+        Parent = parent, Size = UDim2.new(1,-4,0,28),
         BackgroundTransparency = 1,
-        Text = "▎ " .. title,
-        TextColor3 = Color3.fromRGB(240, 200, 90),
-        Font = Enum.Font.GothamBold,
-        TextSize = 13,
+    })
+    New("TextLabel", {
+        Parent = f, Size = UDim2.new(1,0,1,0),
+        BackgroundTransparency = 1, Text = "▎ " .. title,
+        TextColor3 = Color3.fromRGB(245,205,95),
+        Font = Enum.Font.GothamBold, TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
     })
-    Y[name] = Y[name] + 28
-    parent.CanvasSize = UDim2.new(0, 0, 0, Y[name])
 end
 
-local function Toggle(parent, name, label, key, callback)
+local function Toggle(parent, label, key, cb)
     local row = New("TextButton", {
-        Parent = parent,
-        Size = UDim2.new(1, -8, 0, 30),
-        Position = UDim2.new(0, 4, 0, Y[name]),
-        BackgroundColor3 = Color3.fromRGB(22, 22, 28),
-        BackgroundTransparency = 0.15,
-        Text = "",
-        AutoButtonColor = false,
+        Parent = parent, Size = UDim2.new(1,-4,0,32),
+        BackgroundColor3 = Color3.fromRGB(20,20,26),
+        BackgroundTransparency = 0.1,
+        Text = "", AutoButtonColor = false,
     })
     Corner(row, 6)
     New("TextLabel", {
-        Parent = row,
-        Size = UDim2.new(0.7, 0, 1, 0),
-        Position = UDim2.new(0, 12, 0, 0),
-        BackgroundTransparency = 1,
-        Text = label,
-        TextColor3 = Color3.fromRGB(220, 220, 230),
-        Font = Enum.Font.Gotham,
-        TextSize = 12,
+        Parent = row, Size = UDim2.new(0.75,0,1,0), Position = UDim2.new(0,12,0,0),
+        BackgroundTransparency = 1, Text = label,
+        TextColor3 = Color3.fromRGB(220,220,230),
+        Font = Enum.Font.Gotham, TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
     })
-    local ind = New("Frame", {
-        Parent = row,
-        Size = UDim2.new(0, 34, 0, 18),
-        Position = UDim2.new(1, -46, 0.5, -9),
-        BackgroundColor3 = Config[key] and Color3.fromRGB(240, 200, 90) or Color3.fromRGB(50, 50, 60),
+    local on = Config[key] == true
+    local track = New("Frame", {
+        Parent = row, Size = UDim2.new(0,36,0,18),
+        Position = UDim2.new(1,-48,0.5,-9),
+        BackgroundColor3 = on and Color3.fromRGB(245,205,95) or Color3.fromRGB(55,55,65),
         BorderSizePixel = 0,
     })
-    Corner(ind, 9)
+    Corner(track, 9)
     local knob = New("Frame", {
-        Parent = ind,
-        Size = UDim2.new(0, 14, 0, 14),
-        Position = Config[key] and UDim2.new(1, -16, 0, 2) or UDim2.new(0, 2, 0, 2),
-        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-        BorderSizePixel = 0,
+        Parent = track, Size = UDim2.new(0,14,0,14),
+        Position = on and UDim2.new(1,-16,0,2) or UDim2.new(0,2,0,2),
+        BackgroundColor3 = Color3.fromRGB(255,255,255), BorderSizePixel = 0,
     })
     Corner(knob, 7)
-
     row.MouseButton1Click:Connect(function()
         Config[key] = not Config[key]
-        ind.BackgroundColor3 = Config[key] and Color3.fromRGB(240, 200, 90) or Color3.fromRGB(50, 50, 60)
-        knob.Position = Config[key] and UDim2.new(1, -16, 0, 2) or UDim2.new(0, 2, 0, 2)
-        if callback then pcall(callback, Config[key]) end
-        SaveConfig()
+        track.BackgroundColor3 = Config[key] and Color3.fromRGB(245,205,95) or Color3.fromRGB(55,55,65)
+        knob.Position = Config[key] and UDim2.new(1,-16,0,2) or UDim2.new(0,2,0,2)
+        if cb then pcall(cb, Config[key]) end
+        Save()
     end)
-
-    Y[name] = Y[name] + 34
-    parent.CanvasSize = UDim2.new(0, 0, 0, Y[name] + 20)
 end
 
-local function Slider(parent, name, label, key, min, max, decimals)
+local function SliderInput(parent, label, key, min, max, decimals)
     local row = New("Frame", {
-        Parent = parent,
-        Size = UDim2.new(1, -8, 0, 44),
-        Position = UDim2.new(0, 4, 0, Y[name]),
-        BackgroundColor3 = Color3.fromRGB(22, 22, 28),
-        BackgroundTransparency = 0.15,
-        BorderSizePixel = 0,
+        Parent = parent, Size = UDim2.new(1,-4,0,52),
+        BackgroundColor3 = Color3.fromRGB(20,20,26),
+        BackgroundTransparency = 0.1, BorderSizePixel = 0,
     })
     Corner(row, 6)
-    local lbl = New("TextLabel", {
-        Parent = row,
-        Size = UDim2.new(0.65, 0, 0, 20),
-        Position = UDim2.new(0, 12, 0, 4),
-        BackgroundTransparency = 1,
-        Text = label,
-        TextColor3 = Color3.fromRGB(220, 220, 230),
-        Font = Enum.Font.Gotham,
-        TextSize = 12,
+    New("TextLabel", {
+        Parent = row, Size = UDim2.new(0.6,0,0,20), Position = UDim2.new(0,12,0,4),
+        BackgroundTransparency = 1, Text = label,
+        TextColor3 = Color3.fromRGB(220,220,230),
+        Font = Enum.Font.Gotham, TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
     })
-    local valLbl = New("TextLabel", {
-        Parent = row,
-        Size = UDim2.new(0.3, 0, 0, 20),
-        Position = UDim2.new(0.7, 0, 0, 4),
-        BackgroundTransparency = 1,
+    local box = New("TextBox", {
+        Parent = row, Size = UDim2.new(0,70,0,20),
+        Position = UDim2.new(1,-82,0,4),
+        BackgroundColor3 = Color3.fromRGB(12,12,16),
         Text = tostring(Config[key]),
-        TextColor3 = Color3.fromRGB(240, 200, 90),
-        Font = Enum.Font.GothamBold,
-        TextSize = 12,
-        TextXAlignment = Enum.TextXAlignment.Right,
+        TextColor3 = Color3.fromRGB(245,205,95),
+        Font = Enum.Font.GothamBold, TextSize = 12,
+        ClearTextOnFocus = false,
     })
-    local bar = New("Frame", {
-        Parent = row,
-        Size = UDim2.new(1, -24, 0, 6),
-        Position = UDim2.new(0, 12, 0, 30),
-        BackgroundColor3 = Color3.fromRGB(50, 50, 60),
-        BorderSizePixel = 0,
-    })
-    Corner(bar, 3)
-    local fill = New("Frame", {
-        Parent = bar,
-        Size = UDim2.new((Config[key]-min)/(max-min), 0, 1, 0),
-        BackgroundColor3 = Color3.fromRGB(240, 200, 90),
-        BorderSizePixel = 0,
-    })
-    Corner(fill, 3)
+    Corner(box, 4)
+    Stroke(box, Color3.fromRGB(60,60,70), 1)
 
-    local dragging = false
-    local function updateFromX(x)
-        local abs = bar.AbsolutePosition.X
-        local w = bar.AbsoluteSize.X
-        local pct = math.clamp((x - abs) / w, 0, 1)
-        local val = min + pct * (max - min)
+    local bar = New("Frame", {
+        Parent = row, Size = UDim2.new(1,-24,0,8),
+        Position = UDim2.new(0,12,0,32),
+        BackgroundColor3 = Color3.fromRGB(45,45,55),
+        BorderSizePixel = 0,
+    })
+    Corner(bar, 4)
+    local fill = New("Frame", {
+        Parent = bar, Size = UDim2.new((Config[key]-min)/(max-min),0,1,0),
+        BackgroundColor3 = Color3.fromRGB(245,205,95), BorderSizePixel = 0,
+    })
+    Corner(fill, 4)
+
+    local function Apply(val, updateBox)
+        val = math.clamp(val, min, max)
         if decimals then
-            val = math.floor(val * (10^decimals)) / (10^decimals)
+            local m = 10^decimals
+            val = math.floor(val*m)/m
         else
             val = math.floor(val)
         end
         Config[key] = val
-        valLbl.Text = tostring(val)
-        fill.Size = UDim2.new(pct, 0, 1, 0)
-        SaveConfig()
+        if updateBox then box.Text = tostring(val) end
+        fill.Size = UDim2.new((val-min)/(max-min),0,1,0)
+        Save()
     end
+    box.FocusLost:Connect(function()
+        local n = tonumber(box.Text)
+        if n then Apply(n, true) else box.Text = tostring(Config[key]) end
+    end)
 
+    local dragging = false
+    local function UpdateFromX(x)
+        local abs, w = bar.AbsolutePosition.X, bar.AbsoluteSize.X
+        local pct = math.clamp((x-abs)/w, 0, 1)
+        Apply(min + pct*(max-min), true)
+    end
     bar.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+        if i.UserInputType == Enum.UserInputType.MouseButton1
+        or i.UserInputType == Enum.UserInputType.Touch then
             dragging = true
-            updateFromX(i.Position.X)
+            UpdateFromX(i.Position.X)
         end
     end)
     UIS.InputChanged:Connect(function(i)
-        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-            updateFromX(i.Position.X)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
+        or i.UserInputType == Enum.UserInputType.Touch) then
+            UpdateFromX(i.Position.X)
         end
     end)
     UIS.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+        if i.UserInputType == Enum.UserInputType.MouseButton1
+        or i.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
     end)
-
-    Y[name] = Y[name] + 48
-    parent.CanvasSize = UDim2.new(0, 0, 0, Y[name] + 20)
 end
 
-local function Button(parent, name, label, callback)
-    local row = New("TextButton", {
-        Parent = parent,
-        Size = UDim2.new(1, -8, 0, 30),
-        Position = UDim2.new(0, 4, 0, Y[name]),
-        BackgroundColor3 = Color3.fromRGB(30, 26, 12),
-        Text = label,
-        TextColor3 = Color3.fromRGB(240, 200, 90),
-        Font = Enum.Font.GothamMedium,
-        TextSize = 12,
+local function Button(parent, label, cb)
+    local b = New("TextButton", {
+        Parent = parent, Size = UDim2.new(1,-4,0,32),
+        BackgroundColor3 = Color3.fromRGB(30,26,12),
+        Text = label, TextColor3 = Color3.fromRGB(245,205,95),
+        Font = Enum.Font.GothamMedium, TextSize = 12,
         AutoButtonColor = true,
     })
-    Corner(row, 6)
-    Stroke(row, Color3.fromRGB(80, 70, 30), 1)
-    row.MouseButton1Click:Connect(function()
-        if callback then pcall(callback) end
+    Corner(b, 6)
+    Stroke(b, Color3.fromRGB(90,75,30), 1)
+    b.MouseButton1Click:Connect(function()
+        if cb then pcall(cb) end
     end)
-    Y[name] = Y[name] + 34
-    parent.CanvasSize = UDim2.new(0, 0, 0, Y[name] + 20)
+    return b
 end
 
-local function Label(parent, name, text)
-    local lbl = New("TextLabel", {
-        Parent = parent,
-        Size = UDim2.new(1, -8, 0, 22),
-        Position = UDim2.new(0, 4, 0, Y[name]),
-        BackgroundTransparency = 1,
-        Text = text,
-        TextColor3 = Color3.fromRGB(180, 180, 190),
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
+local function Label(parent, text)
+    local l = New("TextLabel", {
+        Parent = parent, Size = UDim2.new(1,-4,0,20),
+        BackgroundTransparency = 1, Text = text,
+        TextColor3 = Color3.fromRGB(180,180,190),
+        Font = Enum.Font.Gotham, TextSize = 11,
         TextXAlignment = Enum.TextXAlignment.Left,
     })
-    Y[name] = Y[name] + 24
-    parent.CanvasSize = UDim2.new(0, 0, 0, Y[name] + 20)
-    return lbl
+    return l
+end
+
+-- Dropdown (simple cycler)
+local function Cycler(parent, label, key, list)
+    local row = New("TextButton", {
+        Parent = parent, Size = UDim2.new(1,-4,0,32),
+        BackgroundColor3 = Color3.fromRGB(20,20,26),
+        BackgroundTransparency = 0.1, Text = "", AutoButtonColor = false,
+    })
+    Corner(row, 6)
+    New("TextLabel", {
+        Parent = row, Size = UDim2.new(0.5,0,1,0), Position = UDim2.new(0,12,0,0),
+        BackgroundTransparency = 1, Text = label,
+        TextColor3 = Color3.fromRGB(220,220,230),
+        Font = Enum.Font.Gotham, TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    local valLbl = New("TextLabel", {
+        Parent = row, Size = UDim2.new(0.4,0,1,0), Position = UDim2.new(0.55,0,0,0),
+        BackgroundTransparency = 1, Text = tostring(Config[key]),
+        TextColor3 = Color3.fromRGB(245,205,95),
+        Font = Enum.Font.GothamBold, TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Right,
+    })
+    row.MouseButton1Click:Connect(function()
+        for i, v in ipairs(list) do
+            if v == Config[key] then
+                Config[key] = list[(i % #list) + 1]
+                break
+            end
+        end
+        valLbl.Text = tostring(Config[key])
+        Save()
+    end)
+    return valLbl
 end
 
 --======================================================================
 -- TABS
 --======================================================================
-local TabMain    = CreateTab("Main",     "◆")
-local TabCombat  = CreateTab("Combat",   "⚔")
-local TabBoss    = CreateTab("Boss",     "☠")
-local TabFarm    = CreateTab("Farm",     "⛏")
-local TabDungeon = CreateTab("Dungeon",  "◈")
-local TabPlayer  = CreateTab("Player",   "☺")
-local TabMisc    = CreateTab("Misc",     "✦")
+local TabMain    = MakeTab("Main",    "◆")
+local TabCombat  = MakeTab("Combat",  "⚔")
+local TabBoss    = MakeTab("Boss",    "☠")
+local TabFarm    = MakeTab("Farm",    "⛏")
+local TabDungeon = MakeTab("Dungeon", "◈")
+local TabPlayer  = MakeTab("Player",  "☺")
+local TabMisc    = MakeTab("Misc",    "✦")
 
 --======================================================================
--- PAGE: MAIN
+-- MAIN TAB
 --======================================================================
-Section(TabMain, "main", "Auto Farm")
-Toggle(TabMain, "main", "Auto Farm Level (theo Quest)", "AutoFarmLevel")
-Toggle(TabMain, "main", "Auto Farm Near (quái/boss gần)", "AutoFarmNear")
-Toggle(TabMain, "main", "Auto Farm Boss (toàn map)", "AutoFarmBoss")
-Toggle(TabMain, "main", "Auto Scan Boss", "AutoScanBoss")
-Slider(TabMain, "main", "Farm Distance", "FarmDistance", 5, 100, 0)
-Slider(TabMain, "main", "Mob Distance", "MobDistance", 100, 2000, 0)
+Section(TabMain, "Auto Farm")
+Toggle(TabMain, "Auto Farm Level (theo Quest)", "AutoFarmLevel")
+Toggle(TabMain, "Auto Farm Near (quái/boss gần)", "AutoFarmNear")
+Toggle(TabMain, "Auto Farm Boss (toàn map)", "AutoFarmBoss")
+Toggle(TabMain, "Auto Scan Boss", "AutoScanBoss")
+Toggle(TabMain, "Auto Material", "AutoMaterial")
+Toggle(TabMain, "Auto Fish", "AutoFish")
 
-Section(TabMain, "main", "Priority")
-Toggle(TabMain, "main", "Smart Priority (Sea > Sail > Boss > Material > LV)", "PriorityMode")
+Section(TabMain, "Priority")
+Toggle(TabMain, "Smart Priority (Sea > Sail > Boss > Material > LV)", "PriorityMode")
 
-Section(TabMain, "main", "Trạng thái")
-local statusLbl = Label(TabMain, "main", "Target: none")
-Label(TabMain, "main", "Sẽ bỏ qua auto click khi chưa nhận quest.")
+Section(TabMain, "Sea Event")
+Toggle(TabMain, "Auto Sea Event", "AutoSeaEvent")
+Toggle(TabMain, "Auto Set Sail", "AutoSetSail")
 
---======================================================================
--- PAGE: COMBAT
---======================================================================
-Section(TabCombat, "combat", "Combat")
-Toggle(TabCombat, "combat", "Auto Buso", "AutoBuso")
-Toggle(TabCombat, "combat", "Auto Ken", "AutoKen")
-Toggle(TabCombat, "combat", "Auto Hao", "AutoHao")
-Slider(TabCombat, "combat", "Skill Distance", "SkillDistance", 3, 40, 0)
-Slider(TabCombat, "combat", "Ngưỡng máu dùng R (%)", "HealthPercent", 0, 100, 0)
-
-Section(TabCombat, "combat", "Skills")
-Toggle(TabCombat, "combat", "Z", "SkillZ")
-Toggle(TabCombat, "combat", "X", "SkillX")
-Toggle(TabCombat, "combat", "C", "SkillC")
-Toggle(TabCombat, "combat", "V", "SkillV")
-Toggle(TabCombat, "combat", "F", "SkillF")
-Toggle(TabCombat, "combat", "B", "SkillB")
-Toggle(TabCombat, "combat", "E", "SkillE")
-
-Section(TabCombat, "combat", "Aim")
-Toggle(TabCombat, "combat", "Auto Aim Mob (luôn khóa mục tiêu)", "AutoAim")
+Section(TabMain, "Trạng thái")
+local statusLbl = Label(TabMain, "Target: none")
+local statLbl = Label(TabMain, "State: idle")
 
 --======================================================================
--- PAGE: BOSS
+-- COMBAT TAB
 --======================================================================
-Section(TabBoss, "boss", "Boss Scanner")
-local bossCountLbl = Label(TabBoss, "boss", "Bosses found: 0")
-Button(TabBoss, "boss", "Refresh Boss List", function()
+Section(TabCombat, "Haki")
+Toggle(TabCombat, "Auto Buso", "AutoBuso")
+Toggle(TabCombat, "Auto Ken", "AutoKen")
+
+Section(TabCombat, "Skills")
+Toggle(TabCombat, "Z", "SkillZ")
+Toggle(TabCombat, "X", "SkillX")
+Toggle(TabCombat, "C", "SkillC")
+Toggle(TabCombat, "V", "SkillV")
+Toggle(TabCombat, "F", "SkillF")
+Toggle(TabCombat, "B", "SkillB")
+Toggle(TabCombat, "E", "SkillE")
+
+Section(TabCombat, "Aim")
+Toggle(TabCombat, "Auto Aim Mob", "AutoAim")
+SliderInput(TabCombat, "Skill Distance", "SkillDistance", 3, 50, 0)
+SliderInput(TabCombat, "Ngưỡng máu R (%)", "HealthPercent", 0, 100, 0)
+
+Section(TabCombat, "Fruit Z cooldown (Auto Dungeon V2)")
+SliderInput(TabCombat, "Fruit Z CD (s)", "FruitCD", 3, 30, 1)
+
+--======================================================================
+-- BOSS TAB
+--======================================================================
+Section(TabBoss, "Boss Scanner")
+local bossCountLbl = Label(TabBoss, "Bosses found: 0")
+Button(TabBoss, "Refresh Boss List", function()
     State.ScannedBosses = ScanBosses()
     bossCountLbl.Text = "Bosses found: " .. #State.ScannedBosses
 end)
-Button(TabBoss, "boss", "Teleport Boss Gần Nhất", function()
+Button(TabBoss, "Teleport Boss Gần Nhất", function()
     local b = ScanBosses()
     if #b > 0 then
-        TP(b[1].hrp.CFrame * CFrame.new(0, Config.SkillDistance, 0))
+        TP(ComputeFarmCFrame(b[1].hrp.Position))
         notif("TonKi Hub", "Đã tele tới: " .. b[1].name)
     else
-        notif("TonKi Hub", "Không có boss nào")
+        notif("TonKi Hub", "Không có boss")
     end
 end)
-Toggle(TabBoss, "boss", "Auto Farm All Boss", "AutoFarmBoss")
+
+Section(TabBoss, "Auto")
+Toggle(TabBoss, "Auto Farm All Boss", "AutoFarmBoss")
 
 --======================================================================
--- PAGE: FARM
+-- FARM TAB
 --======================================================================
-Section(TabFarm, "farm", "Near Farm")
-Toggle(TabFarm, "farm", "Auto Farm Quái/Boss Gần", "AutoFarmNear")
-Label(TabFarm, "farm", "Quét quái xung quanh và tự động farm.")
+Section(TabFarm, "Vị trí đánh")
+Cycler(TabFarm, "Farm Position Mode", "FarmPosMode",
+    {"Above","Behind","Underground","Direct"})
+SliderInput(TabFarm, "Độ cao (Above/Underground)", "FarmHeight", -50, 100, 0)
+SliderInput(TabFarm, "Orbit Radius (Behind)", "OrbitRadius", 3, 60, 0)
+SliderInput(TabFarm, "Orbit Speed (deg/frame)", "OrbitSpeed", 0.5, 15, 1)
+SliderInput(TabFarm, "Farm Distance", "FarmDistance", 5, 100, 0)
+SliderInput(TabFarm, "Mob Scan Distance", "MobDistance", 100, 2000, 0)
 
-Section(TabFarm, "farm", "Material Farm")
--- Material dropdown sẽ đơn giản: list cố định
-local MATERIALS = {
-    "Rusted Scrap","Fresh Fish","Leather","Thief's rag","Angellic's Feather",
-    "Gunpowder","Undead's Ooze","Twilight's Orb","Shark's Canine",
-    "Iron","Carrot","Samurai Badage","Bread Crumbs","Ice Cystal","Magma Cystal",
-    "Lost Ruby","Pile of Bones","Dragon's Orb",
-}
-local matSelected = MATERIALS[1]
-local matLabel = Label(TabFarm, "farm", "Material: " .. matSelected)
-Button(TabFarm, "farm", "Cycle Material (bấm để đổi)", function()
-    for i, m in ipairs(MATERIALS) do
-        if m == matSelected then
-            matSelected = MATERIALS[(i % #MATERIALS) + 1]
-            break
-        end
-    end
-    matLabel.Text = "Material: " .. matSelected
-end)
-Toggle(TabFarm, "farm", "Auto Farm Material Đang Chọn", "AutoMaterial")
+Section(TabFarm, "Weapon Methods (chọn song song)")
+Toggle(TabFarm, "Melee (Combat)", "MethodMelee")
+Toggle(TabFarm, "Sword", "MethodSword")
+Toggle(TabFarm, "Fruit", "MethodFruit")
+SliderInput(TabFarm, "Tốc độ đổi vũ khí (s)", "WeaponSwapSpeed", 0.1, 3, 1)
 
---======================================================================
--- PAGE: DUNGEON
---======================================================================
-Section(TabDungeon, "dun", "Dungeon")
-local dunModes = {"Easy","Normal","Hard"}
-local dunLabel = Label(TabDungeon, "dun", "Mode: " .. Config.DungeonMode)
-Button(TabDungeon, "dun", "Cycle Dungeon Mode", function()
-    for i, m in ipairs(dunModes) do
-        if m == Config.DungeonMode then
-            Config.DungeonMode = dunModes[(i % #dunModes) + 1]
-            break
-        end
-    end
-    dunLabel.Text = "Mode: " .. Config.DungeonMode
-end)
-Toggle(TabDungeon, "dun", "Auto Dungeon (Mode hiện tại)", "AutoDungeon")
-Toggle(TabDungeon, "dun", "Auto Dungeon V2 (Fruit Z + Sword + Scan)", "AutoDungeonV2")
-Slider(TabDungeon, "dun", "Fruit Z Cooldown (s)", "FruitCD", 5, 30, 0)
-
-Section(TabDungeon, "dun", "Sword Select")
-local swordListLabel = Label(TabDungeon, "dun", "Đang quét sword...")
-local function refreshSwords()
-    local names = {}
-    local bp = LP:FindFirstChildOfClass("Backpack")
-    local char = Char()
-    local function scan(container)
-        if not container then return end
-        for _, tool in ipairs(container:GetChildren()) do
-            if tool:IsA("Tool") and not names[tool.Name] then
-                names[tool.Name] = true
-                table.insert(swordListLabel and {}, tool.Name) -- noop
-            end
-        end
-    end
-    -- Build list properly
-    local all = {}
-    local seen = {}
+Section(TabFarm, "Sword Selection")
+local swordLbl = Label(TabFarm, "Selected: " .. tostring(Config.SelectedSword))
+local function ScanSwords()
+    local seen, list = {}, {}
     local function collect(c)
         if not c then return end
         for _, t in ipairs(c:GetChildren()) do
             if t:IsA("Tool") and not seen[t.Name] then
                 seen[t.Name] = true
-                table.insert(all, t.Name)
+                table.insert(list, t.Name)
             end
         end
     end
-    collect(bp)
-    collect(char)
-    return all
+    collect(LP:FindFirstChildOfClass("Backpack"))
+    collect(Char())
+    return list
 end
+Button(TabFarm, "Refresh Sword List", function()
+    local list = ScanSwords()
+    if #list == 0 then
+        swordLbl.Text = "Selected: (không tìm thấy sword)"
+        return
+    end
+    -- cycle to next
+    local idx = 1
+    for i, s in ipairs(list) do
+        if s == Config.SelectedSword then idx = i break end
+    end
+    Config.SelectedSword = list[(idx % #list) + 1]
+    swordLbl.Text = "Selected: " .. Config.SelectedSword
+    Save()
+end)
+Label(TabFarm, "Bấm 'Refresh' để đổi sword đang dùng")
 
-Button(TabDungeon, "dun", "Refresh Sword List", function()
-    local list = refreshSwords()
-    swordListLabel.Text = "Swords: " .. (#list > 0 and table.concat(list, ", ") or "none")
+--======================================================================
+-- DUNGEON TAB
+--======================================================================
+Section(TabDungeon, "Dungeon Settings")
+Cycler(TabDungeon, "Mode", "DungeonMode", {"Easy","Normal","Hard"})
+Toggle(TabDungeon, "Auto Dungeon (đơn giản)", "AutoDungeon")
+Toggle(TabDungeon, "Auto Dungeon V2 (Fruit Z + Sword + Scan)", "AutoDungeonV2")
+
+Section(TabDungeon, "Action")
+Button(TabDungeon, "TP tới Dungeon Entrance", function()
+    local c = DungeonEntrance()
+    if c then TP(c); notif("TonKi Hub", "Đã TP tới dungeon entrance") end
+end)
+Button(TabDungeon, "Enter Dungeon (chọn map)", function()
+    TryEnterDungeon()
 end)
 
 --======================================================================
--- PAGE: PLAYER
+-- PLAYER TAB
 --======================================================================
-Section(TabPlayer, "plr", "Movement")
-Toggle(TabPlayer, "plr", "Inf Jump", "InfJump")
-Toggle(TabPlayer, "plr", "Speed Hack", "SpeedHack")
-Slider(TabPlayer, "plr", "Speed", "SpeedValue", 16, 500, 0)
-Toggle(TabPlayer, "plr", "Walk On Water", "WalkOnWater")
-Toggle(TabPlayer, "plr", "No Clip (dungeon/tele)", "NoClip")
-Toggle(TabPlayer, "plr", "Camera Lock (ghim cam)", "CameraLock")
+Section(TabPlayer, "Movement")
+Toggle(TabPlayer, "Inf Jump", "InfJump")
+Toggle(TabPlayer, "Speed Hack", "SpeedHack")
+SliderInput(TabPlayer, "Speed", "SpeedValue", 16, 500, 0)
+Toggle(TabPlayer, "Walk On Water", "WalkOnWater")
+Toggle(TabPlayer, "No Clip (tele/dungeon)", "NoClip")
+Toggle(TabPlayer, "Camera Lock", "CameraLock")
 
-Section(TabPlayer, "plr", "Camera Lock")
-Button(TabPlayer, "plr", "Lock Camera Tại Đây", function()
-    local cam = workspace.CurrentCamera
-    State.CameraLockPos = cam.CFrame
+Section(TabPlayer, "Camera Lock")
+Button(TabPlayer, "Lock Camera Tại Đây", function()
+    State.AppliedPos = Cam.CFrame
     Config.CameraLock = true
-    notif("TonKi Hub", "Đã lock camera")
+    notif("TonKi Hub", "Camera đã lock")
 end)
-Button(TabPlayer, "plr", "Unlock Camera", function()
+Button(TabPlayer, "Unlock Camera", function()
     Config.CameraLock = false
-    State.CameraLockPos = nil
-    notif("TonKi Hub", "Đã unlock camera")
+    notif("TonKi Hub", "Camera đã unlock")
 end)
 
-Section(TabPlayer, "plr", "Teleport")
-Button(TabPlayer, "plr", "Rejoin Server", function()
-    pcall(function() TPS:Teleport(game.PlaceId) end)
+Section(TabPlayer, "Server")
+Button(TabPlayer, "Rejoin", function() pcall(function() TPS:Teleport(game.PlaceId) end) end)
+
+--======================================================================
+-- MISC TAB
+--======================================================================
+Section(TabMisc, "Info")
+Label(TabMisc, "TonKi Hub v2.0")
+Label(TabMisc, "Priority: Sea Event > Set Sail > Boss > Material > LV")
+Label(TabMisc, "Farm Position: Above / Behind / Underground / Direct")
+
+Section(TabMisc, "Danger")
+Button(TabMisc, "Reset toàn bộ config", function()
+    pcall(function() delfile(SAVE) end)
+    notif("TonKi Hub", "Đã xoá config. Rejoin để reset.")
 end)
 
---======================================================================
--- PAGE: MISC
---======================================================================
-Section(TabMisc, "misc", "Extra")
-Toggle(TabMisc, "misc", "Auto Fish", "AutoFish")
-Toggle(TabMisc, "misc", "Auto Sea Event (ưu tiên cao)", "AutoSeaEvent")
-Toggle(TabMisc, "misc", "Auto Set Sail", "AutoSetSail")
-
-Section(TabMisc, "misc", "Info")
-Label(TabMisc, "misc", "TonKi Hub v1.0 — built for Tonki29")
-Label(TabMisc, "misc", "Priority: Sea Event > Set Sail > Boss > Material > LV")
-
--- Open first tab
+-- Set default tab
 for n, p in pairs(Pages) do
     p.Visible = (n == "Main")
-    TabButtons[n].BackgroundColor3 = (n == "Main") and Color3.fromRGB(35, 30, 15) or Color3.fromRGB(20, 20, 26)
-    TabButtons[n].TextColor3 = (n == "Main") and Color3.fromRGB(240, 200, 90) or Color3.fromRGB(200, 200, 210)
+    TabBtns[n].BackgroundColor3 = (n=="Main")
+        and Color3.fromRGB(40,34,18) or Color3.fromRGB(22,22,28)
+    TabBtns[n].TextColor3 = (n=="Main")
+        and Color3.fromRGB(245,205,95) or Color3.fromRGB(200,200,210)
 end
 
--- Toggle button show/hide
-local draggingToggle = false
-local dragStart, startPos
-
+--======================================================================
+-- TOGGLE BUTTON: click + drag
+--======================================================================
+local draggingToggle, dragStart, startPos
 ToggleBtn.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+    if i.UserInputType == Enum.UserInputType.MouseButton1
+    or i.UserInputType == Enum.UserInputType.Touch then
         draggingToggle = false
         dragStart = i.Position
         startPos = ToggleBtn.AbsolutePosition
@@ -995,80 +992,115 @@ ToggleBtn.InputBegan:Connect(function(i)
     end
 end)
 ToggleBtn.InputChanged:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+    if i.UserInputType == Enum.UserInputType.MouseMovement
+    or i.UserInputType == Enum.UserInputType.Touch then
         if dragStart and (i.Position - dragStart).Magnitude > 4 then
             draggingToggle = true
-            local delta = i.Position - dragStart
-            ToggleBtn.Position = UDim2.new(0, startPos.X + delta.X, 0, startPos.Y + delta.Y)
+            local d = i.Position - dragStart
+            ToggleBtn.Position = UDim2.new(0, startPos.X + d.X, 0, startPos.Y + d.Y)
         end
     end
 end)
 
 --======================================================================
--- CORE LOOPS
+-- ============== CORE LOOPS ==============
 --======================================================================
 
--- 1) Buso / Ken / Hao
+-- Haki
 spawn(function()
     while task.wait(1) do
-        pcall(function()
-            if Config.AutoBuso then UseBuso() end
-            if Config.AutoKen then UseKen() end
-        end)
+        if Config.AutoBuso then UseBuso() end
+        if Config.AutoKen then UseKen() end
     end
 end)
 
--- 2) Speed
+-- Speed
 RunService.RenderStepped:Connect(function()
     if Config.SpeedHack then
-        local h = Hum()
-        if h then h.WalkSpeed = Config.SpeedValue end
+        local h = Hum(); if h then h.WalkSpeed = Config.SpeedValue end
     end
 end)
 
--- 3) Inf Jump
+-- Inf Jump
 UIS.JumpRequest:Connect(function()
-    if Config.InfJump then
-        local h = Hum()
-        if h then h:ChangeState("Jumping") end
-    end
+    if Config.InfJump then local h = Hum() if h then h:ChangeState("Jumping") end end
 end)
 
--- 4) Walk on water
+-- Walk on water
 RunService.Stepped:Connect(function()
     if Config.WalkOnWater then
         pcall(function()
             local sea = workspace:FindFirstChild("SeaFolder")
-            if sea and sea:FindFirstChild("Sea") then
-                sea.Sea.CanCollide = true
+            if sea and sea:FindFirstChild("Sea") then sea.Sea.CanCollide = true end
+        end)
+    end
+end)
+
+-- Camera lock
+RunService.RenderStepped:Connect(function()
+    if Config.CameraLock and State.AppliedPos then
+        Cam.CFrame = State.AppliedPos
+    end
+end)
+
+-- Scan ticker (update mob list + orbit angle)
+RunService.Stepped:Connect(function(_, dt)
+    if Config.FarmPosMode == "Behind" then
+        State.OrbitAngle = (State.OrbitAngle + Config.OrbitSpeed * 60 * dt) % 360
+    end
+    State.ScanTick = State.ScanTick + 1
+    if State.ScanTick >= 20 then
+        State.ScanTick = 0
+        if Config.AutoFarmNear or Config.AutoAim or Config.AutoDungeonV2 then
+            State.Scanned = ScanMobs()
+        end
+        if Config.AutoScanBoss then
+            State.ScannedBosses = ScanBosses()
+            bossCountLbl.Text = "Bosses found: " .. #State.ScannedBosses
+        end
+    end
+end)
+
+-- NoClip
+RunService.Stepped:Connect(function()
+    if Config.NoClip then
+        local c = Char()
+        pcall(function()
+            c.Humanoid:ChangeState(11) -- Physics off-ish
+            for _, part in ipairs(c:GetDescendants()) do
+                if part:IsA("BasePart") and part.CanCollide then
+                    part.CanCollide = false
+                end
             end
         end)
     end
 end)
 
--- 5) Camera Lock
-RunService.RenderStepped:Connect(function()
-    if Config.CameraLock and State.CameraLockPos then
-        local cam = workspace.CurrentCamera
-        cam.CFrame = State.CameraLockPos
-    end
-end)
+--======================================================================
+-- MAIN FARM LOOPS
+--======================================================================
 
--- 6) Auto Aim — luôn update AimPos vào mục tiêu gần nhất
-RunService.Stepped:Connect(function()
-    if not (Config.AutoAim or Config.AutoFarmNear or Config.AutoFarmBoss or Config.AutoDungeonV2) then return end
-    -- Cập nhật mục tiêu từ danh sách đã quét mỗi 0.5s
-    State.ScannedTimer = State.ScannedTimer + 1
-    if State.ScannedTimer >= 30 then
-        State.ScannedTimer = 0
-        State.ScannedMobs = ScanMobs()
-        if Config.AutoScanBoss then State.ScannedBosses = ScanBosses() end
+-- Quest confirm helper
+local function QuestConfirmed(questName)
+    local plg = LP:FindFirstChild("PlayerGui")
+    if not plg then return false end
+    local qf = plg:FindFirstChild("QuestFrame") or plg:FindFirstChild("Quests")
+    if not qf then
+        -- fallback: search descendants
+        for _, f in ipairs(plg:GetDescendants()) do
+            if f:IsA("TextLabel") and f.Text:find(questName) then return true end
+        end
+        return false
     end
-end)
+    for _, f in ipairs(qf:GetDescendants()) do
+        if f:IsA("TextLabel") and f.Text:find(questName) then return true end
+    end
+    return false
+end
 
--- 7) AUTO FARM LEVEL (có kiểm tra quest đã nhận)
+-- AUTO FARM LEVEL
 spawn(function()
-    while task.wait(0.5) do
+    while task.wait(0.4) do
         pcall(function()
             if not Config.AutoFarmLevel then
                 State.QuestTaken = false
@@ -1080,117 +1112,112 @@ spawn(function()
             local mobLv, questName = q[3], q[4]
             local qx, qy, qz = q[5], q[6], q[7]
 
-            -- Nhận quest nếu chưa nhận
             if not State.QuestTaken then
                 TakeQuest(questName)
-                task.wait(0.3)
-            end
-
-            -- Kiểm tra lại quest đã thực sự nhận: check PlayerGui QuestFrame
-            local plg = LP:FindFirstChild("PlayerGui")
-            local confirmed = false
-            if plg then
-                -- Nếu có frame quest hiển thị, xem có khớp tên ko
-                for _, f in ipairs(plg:GetDescendants()) do
-                    if f:IsA("TextLabel") and f.Text:find(questName) then
-                        confirmed = true
-                        break
-                    end
+                task.wait(0.5)
+                if not QuestConfirmed(questName) then
+                    statusLbl.Text = "Đang chờ nhận quest..."
+                    return
                 end
-            end
-            if not confirmed then
-                -- Chưa nhận xong → không click
-                return
+                State.QuestTaken = true
             end
 
-            -- Di chuyển tới khu quest
-            TP(CFrame.new(qx, qy, qz))
-            task.wait(0.4)
+            -- TP to quest area (chỉ TP 1 lần đầu để tránh jitter)
+            if Dist(Vector3.new(qx, qy, qz)) > 500 then
+                TP(CFrame.new(qx, qy, qz))
+                task.wait(0.5)
+            end
 
-            -- Quét quái đúng level
             local mobs = ScanMobs(mobLv)
             if #mobs > 0 then
                 local m = mobs[1]
                 State.TargetMob = m
                 State.AimPos = m.hrp.CFrame
-                TP(m.hrp.CFrame * CFrame.new(0, Config.SkillDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0))
-                if Dist(m.hrp.Position) < 50 then
+                State.AimPosRaw = m.hrp.Position
+
+                RotateWeapon()
+
+                local cf = ComputeFarmCFrame(m.hrp.Position)
+                TP(cf)
+
+                if Dist(m.hrp.Position) <= Config.SkillDistance + 40 then
                     ClickMob()
                     UseSkills()
+                    if Hum() and Hum().Health < Hum().MaxHealth * Config.HealthPercent/100 then
+                        Key("R")
+                    end
                 end
-                statusLbl.Text = "Target: " .. m.name .. " (" .. m.level .. ")"
+                statusLbl.Text = "Target: " .. m.name
+                statLbl.Text = "State: farming lv " .. mobLv
+            else
+                statusLbl.Text = "Đang tìm quái lv " .. mobLv
             end
         end)
     end
 end)
 
--- 8) AUTO FARM NEAR
+-- AUTO FARM NEAR
 spawn(function()
     while task.wait(0.3) do
         pcall(function()
             if not Config.AutoFarmNear then return end
-            local mobs = ScanMobs()
             local target
-            for _, m in ipairs(mobs) do
+            for _, m in ipairs(State.Scanned) do
                 if m.dist <= Config.MobDistance then target = m break end
             end
             if target then
                 State.TargetMob = target
                 State.AimPos = target.hrp.CFrame
-                TP(target.hrp.CFrame * CFrame.new(0, Config.SkillDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0))
-                if Dist(target.hrp.Position) < 60 then
-                    ClickMob()
-                    UseSkills()
+                RotateWeapon()
+                TP(ComputeFarmCFrame(target.hrp.Position))
+                if Dist(target.hrp.Position) <= Config.SkillDistance + 40 then
+                    ClickMob(); UseSkills()
                 end
+                statLbl.Text = "Near: " .. target.name
             end
         end)
     end
 end)
 
--- 9) AUTO FARM BOSS (all) — ưu tiên boss gần nhất, tránh player
+-- AUTO FARM BOSS
 spawn(function()
     while task.wait(0.4) do
         pcall(function()
             if not Config.AutoFarmBoss then return end
             local bosses = ScanBosses()
-            if #bosses == 0 then
-                -- lang thang giữa các tọa độ boss cũ
-                return
-            end
+            if #bosses == 0 then return end
             local b = bosses[1]
             State.TargetMob = b
             State.AimPos = b.hrp.CFrame
-            TP(b.hrp.CFrame * CFrame.new(0, Config.SkillDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0))
-            if Dist(b.hrp.Position) < 60 then
-                ClickMob()
-                UseSkills()
+            RotateWeapon()
+            TP(ComputeFarmCFrame(b.hrp.Position))
+            if Dist(b.hrp.Position) <= Config.SkillDistance + 40 then
+                ClickMob(); UseSkills()
             end
+            statLbl.Text = "Boss: " .. b.name
         end)
     end
 end)
 
--- 10) AUTO MATERIAL (đơn giản: farm mob gần theo tên material)
---     Ở đây ta quét quái theo level suy từ material đang chọn (đơn giản hóa)
+-- AUTO MATERIAL (dùng ScanMobs chung)
 spawn(function()
-    while task.wait(0.6) do
+    while task.wait(0.5) do
         pcall(function()
             if not Config.AutoMaterial then return end
-            -- quét quái gần và đánh — đủ dùng
             local mobs = ScanMobs()
-            if #mobs > 0 then
-                local m = mobs[1]
-                State.AimPos = m.hrp.CFrame
-                TP(m.hrp.CFrame * CFrame.new(0, Config.SkillDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0))
-                if Dist(m.hrp.Position) < 60 then
-                    ClickMob()
-                    UseSkills()
-                end
+            if #mobs == 0 then return end
+            local m = mobs[1]
+            State.AimPos = m.hrp.CFrame
+            RotateWeapon()
+            TP(ComputeFarmCFrame(m.hrp.Position))
+            if Dist(m.hrp.Position) <= Config.SkillDistance + 40 then
+                ClickMob(); UseSkills()
             end
         end)
     end
 end)
 
--- 11) AUTO SEA EVENT — ưu tiên cao nhất
+-- AUTO SEA EVENT (highest priority)
 spawn(function()
     while task.wait(1) do
         pcall(function()
@@ -1198,17 +1225,18 @@ spawn(function()
             local sm = workspace:FindFirstChild("SeaMonster")
             if sm then
                 for _, mon in ipairs(sm:GetChildren()) do
-                    if mon:IsA("Model") and mon:FindFirstChild("HumanoidRootPart") then
+                    if mon:IsA("Model") and mon:FindFirstChild("HumanoidRootPart")
+                    and not IsPlayer(mon) then
                         local h = mon:FindFirstChildOfClass("Humanoid")
                         if h and h.Health > 0 then
                             State.AimPos = mon.HumanoidRootPart.CFrame
-                            TP(mon.HumanoidRootPart.CFrame * CFrame.new(0, 20, 0))
+                            RotateWeapon()
+                            TP(ComputeFarmCFrame(mon.HumanoidRootPart.Position))
                             ClickMob(); UseSkills()
                         end
                     end
                 end
             end
-            -- Kraken
             local monster = workspace:FindFirstChild("Monster")
             if monster then
                 for _, m in ipairs(monster:GetChildren()) do
@@ -1216,7 +1244,8 @@ spawn(function()
                         local t = m.FuryTentacle
                         if t:FindFirstChild("HumanoidRootPart") then
                             State.AimPos = t.HumanoidRootPart.CFrame
-                            TP(t.HumanoidRootPart.CFrame * CFrame.new(0, 20, 0))
+                            RotateWeapon()
+                            TP(ComputeFarmCFrame(t.HumanoidRootPart.Position))
                             ClickMob(); UseSkills()
                         end
                     end
@@ -1226,50 +1255,64 @@ spawn(function()
     end
 end)
 
--- 12) AUTO SET SAIL (just toggling an event — placeholder: TP tới boat spawn)
+-- AUTO SET SAIL placeholder (giữ chỗ)
 spawn(function()
     while task.wait(2) do
-        pcall(function()
-            if not Config.AutoSetSail then return end
-            -- Thuyền: tp tới vị trí thuyền sail (game-specific, giữ đơn giản)
-        end)
+        if Config.AutoSetSail then
+            -- có thể mở rộng sau
+        end
     end
 end)
 
--- 13) AUTO DUNGEON V1 (đơn giản — vào raid và đánh quái)
+-- AUTO DUNGEON V1: TP tới entrance nếu chưa vào, click chọn map, vào raid thì farm
 spawn(function()
     while task.wait(0.5) do
         pcall(function()
             if not Config.AutoDungeon then return end
             local plg = LP:FindFirstChild("PlayerGui")
-            if plg and plg:FindFirstChild("DungeonUI") then
-                State.InRaid = true
-            else
+            local inRaid = plg and plg:FindFirstChild("DungeonUI")
+            if not inRaid then
                 State.InRaid = false
-                -- Chưa vào raid, không spam
+                -- TP tới entrance
+                local ent = DungeonEntrance()
+                if ent and Dist(ent.Position) > 30 then
+                    TP(ent)
+                else
+                    TryEnterDungeon()
+                end
+                statLbl.Text = "Dungeon: chờ vào raid..."
                 return
             end
-            -- Đã trong raid: quét all mob
+            State.InRaid = true
+            -- Quét MOB
             local mf = workspace:FindFirstChild("MOB")
-            if mf then
-                for _, m in ipairs(mf:GetChildren()) do
-                    if m:IsA("Model") and not IsPlayer(m) then
-                        local h = m:FindFirstChildOfClass("Humanoid")
-                        local hrp = m:FindFirstChild("HumanoidRootPart")
-                        if h and hrp and h.Health > 0 then
-                            State.AimPos = hrp.CFrame
-                            TP(hrp.CFrame * CFrame.new(0, 50, 0))
-                            ClickMob(); UseSkills()
-                            break
-                        end
+            if not mf then return end
+            local nearest, nd
+            for _, m in ipairs(mf:GetChildren()) do
+                if m:IsA("Model") and not IsPlayer(m) then
+                    local h = m:FindFirstChildOfClass("Humanoid")
+                    local hrp = m:FindFirstChild("HumanoidRootPart")
+                    if h and hrp and h.Health > 0 then
+                        local d = Dist(hrp.Position)
+                        if not nd or d < nd then nd, nearest = d, m end
                     end
                 end
+            end
+            if nearest then
+                local hrp = nearest.HumanoidRootPart
+                State.AimPos = hrp.CFrame
+                RotateWeapon()
+                TP(ComputeFarmCFrame(hrp.Position))
+                if Dist(hrp.Position) < 150 then
+                    ClickMob(); UseSkills()
+                end
+                statLbl.Text = "Dungeon: " .. nearest.Name
             end
         end)
     end
 end)
 
--- 14) AUTO DUNGEON V2 — Fruit Z + Sword swap + scan all
+-- AUTO DUNGEON V2: fruit Z có CD + scan all + sword
 spawn(function()
     while task.wait(0.5) do
         pcall(function()
@@ -1281,38 +1324,35 @@ spawn(function()
             end
             State.InRaid = true
 
-            -- Đảm bảo sword đã equip nếu đã chọn
-            if Config.SelectedSword then
-                EquipToolByName(Config.SelectedSword)
-            end
+            if Config.SelectedSword then EquipByName(Config.SelectedSword) end
 
-            -- Fruit Z auto-reuse
             if tick() - State.LastFruitZ >= Config.FruitCD then
                 Key("Z")
                 State.LastFruitZ = tick()
             end
 
-            -- Quét tất cả mob trong dungeon (kể cả boss)
             local mf = workspace:FindFirstChild("MOB")
-            if mf then
-                local nearest, nd = nil, math.huge
-                for _, m in ipairs(mf:GetChildren()) do
-                    if m:IsA("Model") and not IsPlayer(m) then
-                        local h = m:FindFirstChildOfClass("Humanoid")
-                        local hrp = m:FindFirstChild("HumanoidRootPart")
-                        if h and hrp and h.Health > 0 then
-                            local d = Dist(hrp.Position)
-                            if d < nd then nd, nearest = d, m end
-                        end
+            if not mf then return end
+            local nearest, nd
+            for _, m in ipairs(mf:GetChildren()) do
+                if m:IsA("Model") and not IsPlayer(m) then
+                    local h = m:FindFirstChildOfClass("Humanoid")
+                    local hrp = m:FindFirstChild("HumanoidRootPart")
+                    if h and hrp and h.Health > 0 then
+                        local d = Dist(hrp.Position)
+                        if not nd or d < nd then nd, nearest = d, m end
                     end
                 end
-                if nearest then
-                    local hrp = nearest.HumanoidRootPart
-                    State.AimPos = hrp.CFrame
-                    TP(hrp.CFrame * CFrame.new(0, 60, 0) * CFrame.Angles(math.rad(-90), 0, 0))
-                    if Dist(hrp.Position) < 100 then
-                        ClickMob()
-                        UseSkills()
+            end
+            if nearest then
+                local hrp = nearest.HumanoidRootPart
+                State.AimPos = hrp.CFrame
+                TP(ComputeFarmCFrame(hrp.Position))
+                if Dist(hrp.Position) < 150 then
+                    ClickMob()
+                    UseSkills()
+                    if Hum() and Hum().Health < Hum().MaxHealth * Config.HealthPercent/100 then
+                        Key("R")
                     end
                 end
             end
@@ -1320,53 +1360,18 @@ spawn(function()
     end
 end)
 
--- 15) AUTO FISH
+-- AUTO FISH
 RunService.Stepped:Connect(function()
     if not Config.AutoFish then return end
     pcall(function()
-        local char = Char()
-        local tool = char:FindFirstChild("Basic Rod") or char:FindFirstChildWhichIsA("Tool")
-        if not tool then return end
-        local args = { "SW_Basic Rod_M1", { MouseHit = HRP().CFrame * CFrame.new(0, 0, 5), Charge = 100 } }
+        local c = Char()
+        local rod = c:FindFirstChild("Basic Rod") or c:FindFirstChildWhichIsA("Tool")
+        if not rod then return end
+        local args = {"SW_Basic Rod_M1", {MouseHit = HRP().CFrame * CFrame.new(0,0,5), Charge = 100}}
         RS.Chest.Remotes.Functions.SkillAction:InvokeServer(unpack(args))
     end)
 end)
 
--- 16) Auto quest spam (nhận quest mỗi 1s khi đang farm lv)
-spawn(function()
-    while task.wait(1) do
-        pcall(function()
-            if Config.AutoFarmLevel and State.QuestInfo and not State.QuestTaken then
-                TakeQuest(State.QuestInfo[4])
-            end
-        end)
-    end
-end)
-
---======================================================================
--- PRIORITY LOGIC (Smart Mode)
---======================================================================
--- Nếu PriorityMode bật:
---   - Nếu có AutoSeaEvent + sea monster → dùng AutoSeaEvent
---   - Nếu không: AutoSetSail
---   - Nếu không: AutoFarmBoss
---   - Nếu không: AutoMaterial
---   - Cuối: AutoFarmLevel
--- (Đã chia task riêng; nếu PriorityMode = true, ta tự disable các task bậc thấp hơn)
-spawn(function()
-    while task.wait(1) do
-        if Config.PriorityMode then
-            -- Đơn giản: khi priority bật, các toggle vẫn chạy song song
-            -- nhưng việc rải task ngẫu nhiên được tránh bởi vì mỗi task check độc lập
-        end
-    end
-end)
-
---======================================================================
--- INIT
 --======================================================================
 notif("TonKi Hub", "Loaded. Ấn nút TK để mở menu.", 5)
-
-return function()
-    Gui:Destroy()
-end
+return function() Gui:Destroy() end
