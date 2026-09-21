@@ -1,62 +1,49 @@
---[[ TONKI — COMMAND BOX INSPECTOR + AUTO EXEC ]]
+--[[ TONKI — COMMAND HOOK + TEST ]]
 local CG = game:GetService("CoreGui")
 local SG = game:GetService("StarterGui")
 local LP = game:GetService("Players").LocalPlayer
-local VIM = game:GetService("VirtualInputManager")
 
 local Log = {}
 local function add(t) table.insert(Log, t); print("[TonKi]", t) end
 
+-- Bật hook trước
+local hooked = false
+pcall(function()
+    local oldNC
+    oldNC = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if method == "FireServer" or method == "InvokeServer" then
+            local full = "?"
+            pcall(function() full = self:GetFullName() end)
+            local args = {...}
+            local s = ""
+            for _, a in ipairs(args) do
+                s = s .. typeof(a) .. ":" .. tostring(a):sub(1,40) .. " | "
+            end
+            add("[HOOK] " .. method .. " → " .. full .. " args=[" .. s .. "]")
+        end
+        return oldNC(self, ...)
+    end))
+    hooked = true
+    add("[Hook] OK")
+end)
+
+if not hooked then
+    add("[X] Hook failed")
+    return
+end
+
+-- CommandBox
 local plg = LP:FindFirstChild("PlayerGui")
 local cmdFrame = plg.MainGui.StarterFrame.CommandFrame
 local cmdBox = cmdFrame.MainFrame.CommandBox
 
-add("[✓] CommandBox: " .. cmdBox:GetFullName())
-
--- Dump mọi signal connection của CommandBox
-for _, sig in ipairs({
-    "FocusLost","Focused","TextChanged","ReturnPressedFromOnScreenKeyboard",
-    "InputBegan","InputEnded","TouchTap"
-}) do
-    local ok, conns = pcall(getconnections, cmdBox[sig])
-    if ok and conns and #conns > 0 then
-        add(sig .. " → " .. #conns)
-        for i, c in ipairs(conns) do
-            add("  [" .. i .. "] " .. tostring(c.Function))
-            local fn = c.Function
-            if fn then
-                for j = 1, 15 do
-                    local ok2, uv = pcall(getupvalue, fn, j)
-                    if not ok2 or uv == nil then break end
-                    local ty = typeof(uv)
-                    local txt = tostring(uv)
-                    if ty == "Instance" then
-                        pcall(function() txt = uv:GetFullName() end)
-                    end
-                    add("      UV[" .. j .. "] " .. ty .. " = " .. txt)
-                end
-            end
-        end
-    end
-end
-
--- Đọc LocalScript CommandScript nếu có thể
-local cmdScript = cmdFrame:FindFirstChild("CommandScript")
-if cmdScript then
-    add("\n=== CommandScript ===")
-    local ok, src = pcall(function() return cmdScript.Source end)
-    if ok and src and #src > 0 then
-        add(src:sub(1, 3000))
-    else
-        add("(Không đọc được source — executor chưa decompile)")
-    end
-end
-
--- GUI dump
+-- GUI
 local gui = Instance.new("ScreenGui", CG)
-gui.Name = "TonKiCmdInspector"; gui.ResetOnSpawn = false
+gui.Name = "TonKiCmdTest"; gui.ResetOnSpawn = false
 local fr = Instance.new("Frame", gui)
-fr.Size = UDim2.new(1,0,1,0); fr.BackgroundColor3=Color3.fromRGB(8,8,10); fr.BorderSizePixel=0
+fr.Size=UDim2.new(1,0,1,0); fr.BackgroundColor3=Color3.fromRGB(8,8,10); fr.BorderSizePixel=0
+
 local close = Instance.new("TextButton", fr)
 close.Size=UDim2.new(0,100,0,32); close.Position=UDim2.new(1,-110,0,10)
 close.BackgroundColor3=Color3.fromRGB(180,40,40); close.Text="ĐÓNG"
@@ -69,53 +56,80 @@ copy.BackgroundColor3=Color3.fromRGB(40,140,60); copy.Text="COPY"
 copy.TextColor3=Color3.new(1,1,1); copy.Font=Enum.Font.GothamBold; copy.TextSize=14
 copy.Parent=fr
 
--- Nút test command
-local run = Instance.new("TextButton", fr)
-run.Size=UDim2.new(0,160,0,32); run.Position=UDim2.new(1,-410,0,10)
-run.BackgroundColor3=Color3.fromRGB(60,40,140)
-run.Text="TEST sbpuzzle"
-run.TextColor3=Color3.new(1,1,1); run.Font=Enum.Font.GothamBold; run.TextSize=13
-run.Parent=fr
-run.MouseButton1Click:Connect(function()
-    cmdBox.Text = "sbpuzzle " .. LP.Name .. " 60"
-    task.wait(0.1)
-    -- thử fire signal
-    if firesignal then
-        pcall(function() firesignal(cmdBox.FocusLost, true) end)
-        add("[Test] firesignal FocusLost")
-    end
-    -- fallback: gửi phím Enter
-    pcall(function()
-        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+-- Nút test các lệnh khác nhau
+local tests = {
+    {name="tp me to me",   cmd="tp "..LP.Name.." "..LP.Name},
+    {name="sbpuzzle 30s",  cmd="sbpuzzle "..LP.Name.." 30"},
+    {name="heal",          cmd="heal "..LP.Name},
+    {name="respawn",       cmd="respawn "..LP.Name},
+    {name="level +1",      cmd="level "..LP.Name.." 5451"},
+    {name="TEST custom",   cmd=nil},  -- dùng CommandBox hiện tại
+}
+
+local y = 50
+for _, t in ipairs(tests) do
+    local b = Instance.new("TextButton", fr)
+    b.Size=UDim2.new(0, 220, 0, 26); b.Position=UDim2.new(0, 10, 0, y)
+    b.BackgroundColor3=Color3.fromRGB(30,26,12)
+    b.Text="TEST: "..t.name
+    b.TextColor3=Color3.fromRGB(245,205,95)
+    b.Font=Enum.Font.GothamMedium; b.TextSize=11
+    b.Parent=fr
+    Instance.new("UICorner", b).CornerRadius=UDim.new(0,5)
+    b.MouseButton1Click:Connect(function()
+        if t.cmd then
+            cmdBox.Text = t.cmd
+        end
+        task.wait(0.1)
+        add("[TEST] " .. t.name .. " | CmdBox.Text='" .. cmdBox.Text .. "'")
+        -- fire FocusLost với enter=true
+        if firesignal then
+            pcall(function() firesignal(cmdBox.FocusLost, true) end)
+        else
+            -- fallback: fire connections trực tiếp
+            local conns = getconnections(cmdBox.FocusLost)
+            for _, c in ipairs(conns) do
+                pcall(function() c.Function(true) end)
+            end
+        end
     end)
-    add("[Test] Đã gửi sbpuzzle " .. LP.Name .. " 60")
-end)
+    y = y + 30
+end
 
 local sc = Instance.new("ScrollingFrame", fr)
-sc.Size=UDim2.new(1,-20,1,-60); sc.Position=UDim2.new(0,10,0,50)
+sc.Size=UDim2.new(1,-20,1,-320); sc.Position=UDim2.new(0,10,0,300)
 sc.BackgroundColor3=Color3.fromRGB(0,0,0); sc.BorderSizePixel=0
 sc.ScrollBarThickness=8; sc.AutomaticCanvasSize=Enum.AutomaticSize.Y
 sc.CanvasSize=UDim2.new(0,0,0,0)
 local lay = Instance.new("UIListLayout", sc)
 lay.SortOrder=Enum.SortOrder.LayoutOrder; lay.Padding=UDim.new(0,2)
 
-local txt = table.concat(Log, "\n")
-for i, l in ipairs(Log) do
-    local lb = Instance.new("TextLabel", sc)
-    lb.Size=UDim2.new(1,-8,0,14); lb.BackgroundTransparency=1
-    lb.Text=l; lb.TextColor3=Color3.fromRGB(210,210,210)
-    lb.Font=Enum.Font.Code; lb.TextSize=10
-    lb.TextXAlignment=Enum.TextXAlignment.Left
-    lb.LayoutOrder=i
-end
+-- live log
+spawn(function()
+    local last = 0
+    while gui.Parent do
+        task.wait(0.2)
+        if #Log > last then
+            for i = last + 1, #Log do
+                local lb = Instance.new("TextLabel", sc)
+                lb.Size=UDim2.new(1,-8,0,14); lb.BackgroundTransparency=1
+                lb.Text=Log[i]; lb.TextColor3=Color3.fromRGB(210,210,210)
+                lb.Font=Enum.Font.Code; lb.TextSize=10
+                lb.TextXAlignment=Enum.TextXAlignment.Left
+                lb.LayoutOrder=i
+            end
+            last = #Log
+            sc.CanvasPosition = Vector2.new(0, 1e6)
+        end
+    end
+end)
 
 copy.MouseButton1Click:Connect(function()
+    local txt = table.concat(Log, "\n")
     if setclipboard then pcall(function() setclipboard(txt) end) end
+    if writefile then pcall(function() writefile("TonKi_CmdTest.txt", txt) end) end
     copy.Text="DONE"; task.wait(1); copy.Text="COPY"
 end)
-if setclipboard then pcall(function() setclipboard(txt) end) end
-if writefile then pcall(function() writefile("TonKi_CmdDump.txt", txt) end) end
 
-pcall(function() SG:SetCore("SendNotification", {Title="TonKi", Text="Đã dump. Bấm TEST để thử sbpuzzle.", Duration=5}) end)
-return txt
+pcall(function() SG:SetCore("SendNotification", {Title="TonKi", Text="Bấm TEST để hook + fire lệnh", Duration=5}) end)
+return Log
