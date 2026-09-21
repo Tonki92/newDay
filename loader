@@ -1,17 +1,19 @@
 --[[
     ╔══════════════════════════════════════════════════════════╗
     ║                    T O N K I   H U B                     ║
-    ║                 King Legacy  •  v2.0                     ║
-    ║              Fix UI + Farm + Dungeon + Multi-weapon      ║
+    ║                 King Legacy  •  v2.1                     ║
+    ║             Compact UI + Full Features                   ║
     ╚══════════════════════════════════════════════════════════╝
 
     >> ĐỔI ẢNH MENU:
-       Upload ảnh của bạn lên Roblox -> Create -> Decal -> lấy ID
-       Rồi đổi biến BACKGROUND_IMAGE_ID bên dưới thành số ID đó.
+       Upload ảnh lên Roblox -> Create -> Decal -> lấy Asset ID
+       Rồi sửa BACKGROUND_IMAGE_ID bên dưới thành số ID đó.
 ]]
 
 local BACKGROUND_IMAGE_ID = 0   -- <-- THAY asset id ảnh của bạn
 
+--======================================================================
+-- SERVICES
 --======================================================================
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -42,7 +44,7 @@ local Config = {
     AutoFish        = false,
 
     -- Movement
-    FarmPosMode     = "Above",   -- Above / Behind / Underground / Direct
+    FarmPosMode     = "Above",
     FarmHeight      = 25,
     OrbitSpeed      = 2,
     OrbitRadius     = 15,
@@ -74,6 +76,10 @@ local Config = {
     -- Misc
     DungeonMode = "Easy",
     PriorityMode = true,
+
+    -- UI
+    MenuSize = "Medium",
+    MenuTransparency = 0.25,
 }
 
 local State = {
@@ -327,24 +333,18 @@ local function UseSkills()
     if Config.SkillE then Key("E") end
 end
 
--- Rotate through enabled weapon methods
 local function RotateWeapon()
     if tick() - State.LastSwap < Config.WeaponSwapSpeed then return end
     State.LastSwap = tick()
-
     local list = {}
     if Config.MethodMelee  then table.insert(list, "Combat") end
     if Config.MethodFruit  then table.insert(list, "Fruit Power") end
-    if Config.MethodSword  then
-        -- Ưu tiên sword đang chọn, fallback "Sword"
-        table.insert(list, Config.SelectedSword or "Sword")
-    end
+    if Config.MethodSword  then table.insert(list, Config.SelectedSword or "Sword") end
     if #list == 0 then return end
     State.SwapIdx = (State.SwapIdx % #list) + 1
     EquipByName(list[State.SwapIdx])
 end
 
--- Position calculation
 local function ComputeFarmCFrame(mobPos)
     local mode = Config.FarmPosMode
     if mode == "Above" then
@@ -355,7 +355,7 @@ local function ComputeFarmCFrame(mobPos)
         local rad = math.rad(State.OrbitAngle)
         local off = Vector3.new(math.cos(rad), 0, math.sin(rad)) * Config.OrbitRadius
         return CFrame.lookAt(mobPos + off + Vector3.new(0, Config.FarmHeight, 0), mobPos)
-    else -- Direct
+    else
         return CFrame.lookAt(mobPos + Vector3.new(0, 3, 0), mobPos)
     end
 end
@@ -419,7 +419,6 @@ local function TryEnterDungeon()
     if not mode then return end
     FireAllClicks(mode)
     task.wait(0.3)
-    -- Try Play button
     for _, gui in ipairs(plg:GetDescendants()) do
         if gui:IsA("TextButton") and (gui.Text:lower():find("play") or gui.Text:lower():find("start")) then
             FireAllClicks(gui)
@@ -428,7 +427,7 @@ local function TryEnterDungeon()
 end
 
 --======================================================================
--- ============== UI ==============
+-- ============== UI (COMPACT) ==============
 --======================================================================
 local function New(class, props, parent)
     local i = Instance.new(class)
@@ -436,7 +435,7 @@ local function New(class, props, parent)
     if parent then i.Parent = parent end
     return i
 end
-local function Corner(p, r) return New("UICorner", {CornerRadius = UDim.new(0, r or 8)}, p) end
+local function Corner(p, r) return New("UICorner", {CornerRadius = UDim.new(0, r or 6)}, p) end
 local function Stroke(p, c, t)
     return New("UIStroke", {Color=c or Color3.fromRGB(90,90,100), Thickness=t or 1,
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, p)
@@ -448,120 +447,150 @@ local Gui = New("ScreenGui", {
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset=true,
 }, parentGui)
 
+local SIZES = {
+    Mini    = {w=340, h=250},
+    Medium  = {w=440, h=320},
+    Maximum = {w=560, h=400},
+}
+
 --======================================================================
 -- FLOATING TOGGLE BUTTON
 --======================================================================
 local ToggleBtn = New("TextButton", {
-    Parent = Gui, Size = UDim2.new(0,56,0,56), Position = UDim2.new(0,20,0.4,0),
-    BackgroundColor3 = Color3.fromRGB(18,18,22), Text = "TK",
-    TextColor3 = Color3.fromRGB(245,205,95), Font = Enum.Font.GothamBold,
-    TextSize = 22, AutoButtonColor = false, Active = true,
+    Parent = Gui, Size = UDim2.new(0,48,0,48), Position = UDim2.new(0,12,0.35,0),
+    BackgroundColor3 = Color3.fromRGB(20,20,25),
+    BackgroundTransparency = 0.1,
+    Text = "TK", TextColor3 = Color3.fromRGB(245,205,95),
+    Font = Enum.Font.GothamBold, TextSize = 18,
+    AutoButtonColor = false, Active = true, ZIndex = 100,
 })
-Corner(ToggleBtn, 28)
-Stroke(ToggleBtn, Color3.fromRGB(245,205,95), 2)
+Corner(ToggleBtn, 24)
+Stroke(ToggleBtn, Color3.fromRGB(245,205,95), 1.5)
 
 --======================================================================
 -- MAIN WINDOW
 --======================================================================
 local Main = New("Frame", {
-    Parent = Gui, Size = UDim2.new(0,660,0,420),
-    Position = UDim2.new(0.5,-330,0.5,-210),
-    BackgroundColor3 = Color3.fromRGB(10,10,14), BorderSizePixel = 0,
-    Active = true, Draggable = true, ClipsDescendants = true, Visible = false,
+    Parent = Gui,
+    Size = UDim2.new(0, SIZES[Config.MenuSize].w, 0, SIZES[Config.MenuSize].h),
+    Position = UDim2.new(0.5, -SIZES[Config.MenuSize].w/2, 0.5, -SIZES[Config.MenuSize].h/2),
+    BackgroundColor3 = Color3.fromRGB(12,12,16),
+    BackgroundTransparency = Config.MenuTransparency,
+    BorderSizePixel = 0, Active = true, Draggable = true,
+    ClipsDescendants = true, Visible = false, ZIndex = 50,
 })
-Corner(Main, 12)
-Stroke(Main, Color3.fromRGB(245,205,95), 1.5)
+Corner(Main, 10)
+Stroke(Main, Color3.fromRGB(245,205,95), 1.2)
 
+local BgImage
 if BACKGROUND_IMAGE_ID and BACKGROUND_IMAGE_ID > 0 then
-    local bg = New("ImageLabel", {
-        Parent = Main, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1,
-        Image = "rbxassetid://" .. tostring(BACKGROUND_IMAGE_ID),
-        ImageTransparency = 0.5, ScaleType = Enum.ScaleType.Crop, ZIndex = 0,
-    })
-    Corner(bg, 12)
-    New("Frame", {
+    BgImage = New("ImageLabel", {
         Parent = Main, Size = UDim2.new(1,0,1,0),
-        BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.35,
-        BorderSizePixel = 0, ZIndex = 1,
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://" .. tostring(BACKGROUND_IMAGE_ID),
+        ImageTransparency = 0.6,
+        ScaleType = Enum.ScaleType.Crop, ZIndex = 0,
     })
+    Corner(BgImage, 10)
 end
 
+local function ApplyTransparency()
+    Main.BackgroundTransparency = Config.MenuTransparency
+    if BgImage then
+        BgImage.ImageTransparency = math.min(1, Config.MenuTransparency + 0.35)
+    end
+end
+
+local function ApplySize(name)
+    local s = SIZES[name] or SIZES.Medium
+    Main.Size = UDim2.new(0, s.w, 0, s.h)
+    Main.Position = UDim2.new(0.5, -s.w/2, 0.5, -s.h/2)
+end
+
+--======================================================================
 -- HEADER
+--======================================================================
 local Header = New("Frame", {
-    Parent = Main, Size = UDim2.new(1,0,0,42),
-    BackgroundColor3 = Color3.fromRGB(14,14,18), BackgroundTransparency = 0.1,
+    Parent = Main, Size = UDim2.new(1,0,0,34),
+    BackgroundColor3 = Color3.fromRGB(16,16,22),
+    BackgroundTransparency = math.min(0.95, Config.MenuTransparency + 0.15),
     BorderSizePixel = 0, ZIndex = 5,
 })
+Corner(Header, 10)
+
 New("TextLabel", {
-    Parent = Header, Size = UDim2.new(0.7,0,1,0), Position = UDim2.new(0,16,0,0),
-    BackgroundTransparency = 1, Text = "◈  TONKI HUB  —  King Legacy",
+    Parent = Header, Size = UDim2.new(0.7,0,1,0), Position = UDim2.new(0,12,0,0),
+    BackgroundTransparency = 1, Text = "◈ TONKI HUB",
     TextColor3 = Color3.fromRGB(245,205,95), Font = Enum.Font.GothamBold,
-    TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
+    TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
 })
+
 local CloseBtn = New("TextButton", {
-    Parent = Header, Size = UDim2.new(0,30,0,30), Position = UDim2.new(1,-40,0,6),
-    BackgroundColor3 = Color3.fromRGB(40,20,20), Text = "✕",
+    Parent = Header, Size = UDim2.new(0,26,0,26), Position = UDim2.new(1,-32,0,4),
+    BackgroundColor3 = Color3.fromRGB(45,22,22), Text = "✕",
     TextColor3 = Color3.fromRGB(255,130,130), Font = Enum.Font.GothamBold,
-    TextSize = 16, AutoButtonColor = false, ZIndex = 6,
+    TextSize = 14, AutoButtonColor = false, ZIndex = 6,
 })
 Corner(CloseBtn, 6)
 CloseBtn.MouseButton1Click:Connect(function() Main.Visible = false end)
 
--- TAB BAR (left)
+--======================================================================
+-- TAB BAR (horizontal)
+--======================================================================
 local TabBar = New("ScrollingFrame", {
-    Parent = Main, Size = UDim2.new(0,150,1,-42), Position = UDim2.new(0,0,0,42),
-    BackgroundColor3 = Color3.fromRGB(8,8,12), BackgroundTransparency = 0.2,
+    Parent = Main, Size = UDim2.new(1,0,0,30), Position = UDim2.new(0,0,0,34),
+    BackgroundColor3 = Color3.fromRGB(10,10,14),
+    BackgroundTransparency = math.min(0.95, Config.MenuTransparency + 0.2),
     BorderSizePixel = 0, ScrollBarThickness = 0,
-    CanvasSize = UDim2.new(0,0,0,0), ZIndex = 3,
+    ScrollingDirection = Enum.ScrollingDirection.X,
+    CanvasSize = UDim2.new(0,0,0,0),
+    ZIndex = 5,
 })
 New("UIListLayout", {
-    Parent = TabBar, Padding = UDim.new(0,4),
+    Parent = TabBar, Padding = UDim.new(0,2), FillDirection = Enum.FillDirection.Horizontal,
     SortOrder = Enum.SortOrder.LayoutOrder,
-    HorizontalAlignment = Enum.HorizontalAlignment.Center,
+    VerticalAlignment = Enum.VerticalAlignment.Center,
 })
-New("UIPadding", {Parent = TabBar,
-    PaddingTop = UDim.new(0,8), PaddingBottom = UDim.new(0,8)})
+New("UIPadding", {Parent = TabBar, PaddingLeft = UDim.new(0,6)})
 
--- Content area
 local Content = New("Frame", {
-    Parent = Main, Size = UDim2.new(1,-150,1,-42), Position = UDim2.new(0,150,0,42),
-    BackgroundTransparency = 1, ZIndex = 3,
+    Parent = Main, Size = UDim2.new(1,0,1,-64), Position = UDim2.new(0,0,0,64),
+    BackgroundTransparency = 1, ZIndex = 5,
 })
 
 --======================================================================
--- UI COMPONENTS
+-- COMPONENTS
 --======================================================================
-local Pages = {}
-local TabBtns = {}
+local Pages, TabBtns = {}, {}
 
 local function MakeTab(name, icon)
     local btn = New("TextButton", {
-        Parent = TabBar, Size = UDim2.new(1,-12,0,34),
+        Parent = TabBar, Size = UDim2.new(0,64,0,26),
         BackgroundColor3 = Color3.fromRGB(22,22,28),
-        Text = "  " .. icon .. "  " .. name,
+        BackgroundTransparency = 0.2,
+        Text = icon .. " " .. name,
         TextColor3 = Color3.fromRGB(200,200,210),
-        Font = Enum.Font.GothamMedium, TextSize = 12,
-        TextXAlignment = Enum.TextXAlignment.Left,
+        Font = Enum.Font.GothamMedium, TextSize = 10,
         AutoButtonColor = false,
     })
-    Corner(btn, 6)
+    Corner(btn, 5)
     local page = New("ScrollingFrame", {
-        Parent = Content, Size = UDim2.new(1,-20,1,-20),
-        Position = UDim2.new(0,10,0,10),
+        Parent = Content, Size = UDim2.new(1,-12,1,-8),
+        Position = UDim2.new(0,6,0,4),
         BackgroundTransparency = 1, BorderSizePixel = 0,
-        ScrollBarThickness = 4,
+        ScrollBarThickness = 3,
         ScrollBarImageColor3 = Color3.fromRGB(245,205,95),
         CanvasSize = UDim2.new(0,0,0,0),
         Visible = false,
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
     })
     New("UIListLayout", {
-        Parent = page, Padding = UDim.new(0,6),
+        Parent = page, Padding = UDim.new(0,4),
         SortOrder = Enum.SortOrder.LayoutOrder,
     })
     New("UIPadding", {Parent = page,
-        PaddingTop = UDim.new(0,4), PaddingBottom = UDim.new(0,12),
-        PaddingLeft = UDim.new(0,4), PaddingRight = UDim.new(0,4)})
+        PaddingTop = UDim.new(0,4), PaddingBottom = UDim.new(0,10),
+        PaddingLeft = UDim.new(0,2), PaddingRight = UDim.new(0,2)})
     Pages[name] = page
     TabBtns[name] = btn
     btn.MouseButton1Click:Connect(function()
@@ -578,51 +607,51 @@ end
 
 local function Section(parent, title)
     local f = New("Frame", {
-        Parent = parent, Size = UDim2.new(1,-4,0,28),
+        Parent = parent, Size = UDim2.new(1,-2,0,22),
         BackgroundTransparency = 1,
     })
     New("TextLabel", {
         Parent = f, Size = UDim2.new(1,0,1,0),
         BackgroundTransparency = 1, Text = "▎ " .. title,
         TextColor3 = Color3.fromRGB(245,205,95),
-        Font = Enum.Font.GothamBold, TextSize = 13,
+        Font = Enum.Font.GothamBold, TextSize = 11,
         TextXAlignment = Enum.TextXAlignment.Left,
     })
 end
 
 local function Toggle(parent, label, key, cb)
     local row = New("TextButton", {
-        Parent = parent, Size = UDim2.new(1,-4,0,32),
+        Parent = parent, Size = UDim2.new(1,-2,0,28),
         BackgroundColor3 = Color3.fromRGB(20,20,26),
-        BackgroundTransparency = 0.1,
+        BackgroundTransparency = math.min(0.9, Config.MenuTransparency),
         Text = "", AutoButtonColor = false,
     })
-    Corner(row, 6)
+    Corner(row, 5)
     New("TextLabel", {
-        Parent = row, Size = UDim2.new(0.75,0,1,0), Position = UDim2.new(0,12,0,0),
+        Parent = row, Size = UDim2.new(0.7,0,1,0), Position = UDim2.new(0,10,0,0),
         BackgroundTransparency = 1, Text = label,
         TextColor3 = Color3.fromRGB(220,220,230),
-        Font = Enum.Font.Gotham, TextSize = 12,
+        Font = Enum.Font.Gotham, TextSize = 11,
         TextXAlignment = Enum.TextXAlignment.Left,
     })
     local on = Config[key] == true
     local track = New("Frame", {
-        Parent = row, Size = UDim2.new(0,36,0,18),
-        Position = UDim2.new(1,-48,0.5,-9),
+        Parent = row, Size = UDim2.new(0,32,0,16),
+        Position = UDim2.new(1,-40,0.5,-8),
         BackgroundColor3 = on and Color3.fromRGB(245,205,95) or Color3.fromRGB(55,55,65),
         BorderSizePixel = 0,
     })
-    Corner(track, 9)
+    Corner(track, 8)
     local knob = New("Frame", {
-        Parent = track, Size = UDim2.new(0,14,0,14),
-        Position = on and UDim2.new(1,-16,0,2) or UDim2.new(0,2,0,2),
+        Parent = track, Size = UDim2.new(0,12,0,12),
+        Position = on and UDim2.new(1,-14,0,2) or UDim2.new(0,2,0,2),
         BackgroundColor3 = Color3.fromRGB(255,255,255), BorderSizePixel = 0,
     })
-    Corner(knob, 7)
+    Corner(knob, 6)
     row.MouseButton1Click:Connect(function()
         Config[key] = not Config[key]
         track.BackgroundColor3 = Config[key] and Color3.fromRGB(245,205,95) or Color3.fromRGB(55,55,65)
-        knob.Position = Config[key] and UDim2.new(1,-16,0,2) or UDim2.new(0,2,0,2)
+        knob.Position = Config[key] and UDim2.new(1,-14,0,2) or UDim2.new(0,2,0,2)
         if cb then pcall(cb, Config[key]) end
         Save()
     end)
@@ -630,42 +659,43 @@ end
 
 local function SliderInput(parent, label, key, min, max, decimals)
     local row = New("Frame", {
-        Parent = parent, Size = UDim2.new(1,-4,0,52),
+        Parent = parent, Size = UDim2.new(1,-2,0,44),
         BackgroundColor3 = Color3.fromRGB(20,20,26),
-        BackgroundTransparency = 0.1, BorderSizePixel = 0,
+        BackgroundTransparency = math.min(0.9, Config.MenuTransparency),
+        BorderSizePixel = 0,
     })
-    Corner(row, 6)
+    Corner(row, 5)
     New("TextLabel", {
-        Parent = row, Size = UDim2.new(0.6,0,0,20), Position = UDim2.new(0,12,0,4),
+        Parent = row, Size = UDim2.new(0.6,0,0,16), Position = UDim2.new(0,10,0,3),
         BackgroundTransparency = 1, Text = label,
         TextColor3 = Color3.fromRGB(220,220,230),
-        Font = Enum.Font.Gotham, TextSize = 12,
+        Font = Enum.Font.Gotham, TextSize = 11,
         TextXAlignment = Enum.TextXAlignment.Left,
     })
     local box = New("TextBox", {
-        Parent = row, Size = UDim2.new(0,70,0,20),
-        Position = UDim2.new(1,-82,0,4),
+        Parent = row, Size = UDim2.new(0,58,0,18),
+        Position = UDim2.new(1,-66,0,2),
         BackgroundColor3 = Color3.fromRGB(12,12,16),
         Text = tostring(Config[key]),
         TextColor3 = Color3.fromRGB(245,205,95),
-        Font = Enum.Font.GothamBold, TextSize = 12,
+        Font = Enum.Font.GothamBold, TextSize = 11,
         ClearTextOnFocus = false,
     })
     Corner(box, 4)
     Stroke(box, Color3.fromRGB(60,60,70), 1)
 
     local bar = New("Frame", {
-        Parent = row, Size = UDim2.new(1,-24,0,8),
-        Position = UDim2.new(0,12,0,32),
+        Parent = row, Size = UDim2.new(1,-20,0,6),
+        Position = UDim2.new(0,10,0,26),
         BackgroundColor3 = Color3.fromRGB(45,45,55),
         BorderSizePixel = 0,
     })
-    Corner(bar, 4)
+    Corner(bar, 3)
     local fill = New("Frame", {
         Parent = bar, Size = UDim2.new((Config[key]-min)/(max-min),0,1,0),
         BackgroundColor3 = Color3.fromRGB(245,205,95), BorderSizePixel = 0,
     })
-    Corner(fill, 4)
+    Corner(fill, 3)
 
     local function Apply(val, updateBox)
         val = math.clamp(val, min, max)
@@ -688,6 +718,7 @@ local function SliderInput(parent, label, key, min, max, decimals)
     local dragging = false
     local function UpdateFromX(x)
         local abs, w = bar.AbsolutePosition.X, bar.AbsoluteSize.X
+        if w <= 0 then return end
         local pct = math.clamp((x-abs)/w, 0, 1)
         Apply(min + pct*(max-min), true)
     end
@@ -714,51 +745,49 @@ end
 
 local function Button(parent, label, cb)
     local b = New("TextButton", {
-        Parent = parent, Size = UDim2.new(1,-4,0,32),
+        Parent = parent, Size = UDim2.new(1,-2,0,28),
         BackgroundColor3 = Color3.fromRGB(30,26,12),
+        BackgroundTransparency = math.min(0.85, Config.MenuTransparency),
         Text = label, TextColor3 = Color3.fromRGB(245,205,95),
-        Font = Enum.Font.GothamMedium, TextSize = 12,
+        Font = Enum.Font.GothamMedium, TextSize = 11,
         AutoButtonColor = true,
     })
-    Corner(b, 6)
+    Corner(b, 5)
     Stroke(b, Color3.fromRGB(90,75,30), 1)
-    b.MouseButton1Click:Connect(function()
-        if cb then pcall(cb) end
-    end)
+    b.MouseButton1Click:Connect(function() if cb then pcall(cb) end end)
     return b
 end
 
 local function Label(parent, text)
-    local l = New("TextLabel", {
-        Parent = parent, Size = UDim2.new(1,-4,0,20),
+    return New("TextLabel", {
+        Parent = parent, Size = UDim2.new(1,-2,0,18),
         BackgroundTransparency = 1, Text = text,
         TextColor3 = Color3.fromRGB(180,180,190),
+        Font = Enum.Font.Gotham, TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+end
+
+local function Cycler(parent, label, key, list)
+    local row = New("TextButton", {
+        Parent = parent, Size = UDim2.new(1,-2,0,28),
+        BackgroundColor3 = Color3.fromRGB(20,20,26),
+        BackgroundTransparency = math.min(0.9, Config.MenuTransparency),
+        Text = "", AutoButtonColor = false,
+    })
+    Corner(row, 5)
+    New("TextLabel", {
+        Parent = row, Size = UDim2.new(0.5,0,1,0), Position = UDim2.new(0,10,0,0),
+        BackgroundTransparency = 1, Text = label,
+        TextColor3 = Color3.fromRGB(220,220,230),
         Font = Enum.Font.Gotham, TextSize = 11,
         TextXAlignment = Enum.TextXAlignment.Left,
     })
-    return l
-end
-
--- Dropdown (simple cycler)
-local function Cycler(parent, label, key, list)
-    local row = New("TextButton", {
-        Parent = parent, Size = UDim2.new(1,-4,0,32),
-        BackgroundColor3 = Color3.fromRGB(20,20,26),
-        BackgroundTransparency = 0.1, Text = "", AutoButtonColor = false,
-    })
-    Corner(row, 6)
-    New("TextLabel", {
-        Parent = row, Size = UDim2.new(0.5,0,1,0), Position = UDim2.new(0,12,0,0),
-        BackgroundTransparency = 1, Text = label,
-        TextColor3 = Color3.fromRGB(220,220,230),
-        Font = Enum.Font.Gotham, TextSize = 12,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    })
     local valLbl = New("TextLabel", {
-        Parent = row, Size = UDim2.new(0.4,0,1,0), Position = UDim2.new(0.55,0,0,0),
+        Parent = row, Size = UDim2.new(0.45,0,1,0), Position = UDim2.new(0.53,0,0,0),
         BackgroundTransparency = 1, Text = tostring(Config[key]),
         TextColor3 = Color3.fromRGB(245,205,95),
-        Font = Enum.Font.GothamBold, TextSize = 12,
+        Font = Enum.Font.GothamBold, TextSize = 11,
         TextXAlignment = Enum.TextXAlignment.Right,
     })
     row.MouseButton1Click:Connect(function()
@@ -777,27 +806,55 @@ end
 --======================================================================
 -- TABS
 --======================================================================
-local TabMain    = MakeTab("Main",    "◆")
-local TabCombat  = MakeTab("Combat",  "⚔")
-local TabBoss    = MakeTab("Boss",    "☠")
-local TabFarm    = MakeTab("Farm",    "⛏")
-local TabDungeon = MakeTab("Dungeon", "◈")
-local TabPlayer  = MakeTab("Player",  "☺")
-local TabMisc    = MakeTab("Misc",    "✦")
+local TabSettings = MakeTab("Set",   "⚙")
+local TabMain     = MakeTab("Main",  "◆")
+local TabCombat   = MakeTab("Cmbt",  "⚔")
+local TabBoss     = MakeTab("Boss",  "☠")
+local TabFarm     = MakeTab("Farm",  "⛏")
+local TabDungeon  = MakeTab("Dung",  "◈")
+local TabPlayer   = MakeTab("Play",  "☺")
+local TabMisc     = MakeTab("Misc",  "✦")
+
+--======================================================================
+-- SETTINGS TAB
+--======================================================================
+Section(TabSettings, "Kích thước menu")
+Button(TabSettings, "Mini   (nhỏ gọn)", function()
+    Config.MenuSize = "Mini"; ApplySize("Mini"); Save()
+    notif("TonKi Hub", "Đã đổi sang Mini")
+end)
+Button(TabSettings, "Medium (vừa - mặc định)", function()
+    Config.MenuSize = "Medium"; ApplySize("Medium"); Save()
+    notif("TonKi Hub", "Đã đổi sang Medium")
+end)
+Button(TabSettings, "Maximum (to nhất)", function()
+    Config.MenuSize = "Maximum"; ApplySize("Maximum"); Save()
+    notif("TonKi Hub", "Đã đổi sang Maximum")
+end)
+
+Section(TabSettings, "Độ trong suốt menu")
+SliderInput(TabSettings, "Transparency (0 đục / 1 trong)",
+    "MenuTransparency", 0, 0.85, 2)
+Button(TabSettings, "Apply Transparency", function()
+    ApplyTransparency()
+end)
+
+Section(TabSettings, "Info")
+Label(TabSettings, "TonKi Hub v2.1")
+Label(TabSettings, "Tap nút TK để mở/đóng, kéo để di chuyển")
+Label(TabSettings, "Size + Transparency được lưu vào config")
 
 --======================================================================
 -- MAIN TAB
 --======================================================================
 Section(TabMain, "Auto Farm")
-Toggle(TabMain, "Auto Farm Level (theo Quest)", "AutoFarmLevel")
-Toggle(TabMain, "Auto Farm Near (quái/boss gần)", "AutoFarmNear")
+Toggle(TabMain, "Auto Farm Level (Quest)", "AutoFarmLevel")
+Toggle(TabMain, "Auto Farm Near", "AutoFarmNear")
 Toggle(TabMain, "Auto Farm Boss (toàn map)", "AutoFarmBoss")
 Toggle(TabMain, "Auto Scan Boss", "AutoScanBoss")
 Toggle(TabMain, "Auto Material", "AutoMaterial")
 Toggle(TabMain, "Auto Fish", "AutoFish")
-
-Section(TabMain, "Priority")
-Toggle(TabMain, "Smart Priority (Sea > Sail > Boss > Material > LV)", "PriorityMode")
+Toggle(TabMain, "Smart Priority", "PriorityMode")
 
 Section(TabMain, "Sea Event")
 Toggle(TabMain, "Auto Sea Event", "AutoSeaEvent")
@@ -805,7 +862,7 @@ Toggle(TabMain, "Auto Set Sail", "AutoSetSail")
 
 Section(TabMain, "Trạng thái")
 local statusLbl = Label(TabMain, "Target: none")
-local statLbl = Label(TabMain, "State: idle")
+local statLbl   = Label(TabMain, "State: idle")
 
 --======================================================================
 -- COMBAT TAB
@@ -827,8 +884,6 @@ Section(TabCombat, "Aim")
 Toggle(TabCombat, "Auto Aim Mob", "AutoAim")
 SliderInput(TabCombat, "Skill Distance", "SkillDistance", 3, 50, 0)
 SliderInput(TabCombat, "Ngưỡng máu R (%)", "HealthPercent", 0, 100, 0)
-
-Section(TabCombat, "Fruit Z cooldown (Auto Dungeon V2)")
 SliderInput(TabCombat, "Fruit Z CD (s)", "FruitCD", 3, 30, 1)
 
 --======================================================================
@@ -849,19 +904,17 @@ Button(TabBoss, "Teleport Boss Gần Nhất", function()
         notif("TonKi Hub", "Không có boss")
     end
 end)
-
-Section(TabBoss, "Auto")
 Toggle(TabBoss, "Auto Farm All Boss", "AutoFarmBoss")
 
 --======================================================================
 -- FARM TAB
 --======================================================================
 Section(TabFarm, "Vị trí đánh")
-Cycler(TabFarm, "Farm Position Mode", "FarmPosMode",
+Cycler(TabFarm, "Farm Position", "FarmPosMode",
     {"Above","Behind","Underground","Direct"})
-SliderInput(TabFarm, "Độ cao (Above/Underground)", "FarmHeight", -50, 100, 0)
-SliderInput(TabFarm, "Orbit Radius (Behind)", "OrbitRadius", 3, 60, 0)
-SliderInput(TabFarm, "Orbit Speed (deg/frame)", "OrbitSpeed", 0.5, 15, 1)
+SliderInput(TabFarm, "Độ cao", "FarmHeight", -50, 100, 0)
+SliderInput(TabFarm, "Orbit Radius", "OrbitRadius", 3, 60, 0)
+SliderInput(TabFarm, "Orbit Speed", "OrbitSpeed", 0.5, 15, 1)
 SliderInput(TabFarm, "Farm Distance", "FarmDistance", 5, 100, 0)
 SliderInput(TabFarm, "Mob Scan Distance", "MobDistance", 100, 2000, 0)
 
@@ -873,7 +926,7 @@ SliderInput(TabFarm, "Tốc độ đổi vũ khí (s)", "WeaponSwapSpeed", 0.1, 
 
 Section(TabFarm, "Sword Selection")
 local swordLbl = Label(TabFarm, "Selected: " .. tostring(Config.SelectedSword))
-local function ScanSwords()
+Button(TabFarm, "Refresh Sword List (đổi sword)", function()
     local seen, list = {}, {}
     local function collect(c)
         if not c then return end
@@ -886,41 +939,31 @@ local function ScanSwords()
     end
     collect(LP:FindFirstChildOfClass("Backpack"))
     collect(Char())
-    return list
-end
-Button(TabFarm, "Refresh Sword List", function()
-    local list = ScanSwords()
     if #list == 0 then
-        swordLbl.Text = "Selected: (không tìm thấy sword)"
+        swordLbl.Text = "Selected: (không có sword)"
         return
     end
-    -- cycle to next
     local idx = 1
-    for i, s in ipairs(list) do
-        if s == Config.SelectedSword then idx = i break end
-    end
+    for i, s in ipairs(list) do if s == Config.SelectedSword then idx = i break end end
     Config.SelectedSword = list[(idx % #list) + 1]
     swordLbl.Text = "Selected: " .. Config.SelectedSword
     Save()
 end)
-Label(TabFarm, "Bấm 'Refresh' để đổi sword đang dùng")
 
 --======================================================================
 -- DUNGEON TAB
 --======================================================================
-Section(TabDungeon, "Dungeon Settings")
+Section(TabDungeon, "Settings")
 Cycler(TabDungeon, "Mode", "DungeonMode", {"Easy","Normal","Hard"})
-Toggle(TabDungeon, "Auto Dungeon (đơn giản)", "AutoDungeon")
-Toggle(TabDungeon, "Auto Dungeon V2 (Fruit Z + Sword + Scan)", "AutoDungeonV2")
+Toggle(TabDungeon, "Auto Dungeon", "AutoDungeon")
+Toggle(TabDungeon, "Auto Dungeon V2 (Fruit Z + Sword)", "AutoDungeonV2")
 
 Section(TabDungeon, "Action")
-Button(TabDungeon, "TP tới Dungeon Entrance", function()
+Button(TabDungeon, "TP Dungeon Entrance", function()
     local c = DungeonEntrance()
-    if c then TP(c); notif("TonKi Hub", "Đã TP tới dungeon entrance") end
+    if c then TP(c); notif("TonKi Hub", "Đã TP entrance") end
 end)
-Button(TabDungeon, "Enter Dungeon (chọn map)", function()
-    TryEnterDungeon()
-end)
+Button(TabDungeon, "Enter Dungeon", function() TryEnterDungeon() end)
 
 --======================================================================
 -- PLAYER TAB
@@ -930,11 +973,11 @@ Toggle(TabPlayer, "Inf Jump", "InfJump")
 Toggle(TabPlayer, "Speed Hack", "SpeedHack")
 SliderInput(TabPlayer, "Speed", "SpeedValue", 16, 500, 0)
 Toggle(TabPlayer, "Walk On Water", "WalkOnWater")
-Toggle(TabPlayer, "No Clip (tele/dungeon)", "NoClip")
+Toggle(TabPlayer, "No Clip", "NoClip")
 Toggle(TabPlayer, "Camera Lock", "CameraLock")
 
 Section(TabPlayer, "Camera Lock")
-Button(TabPlayer, "Lock Camera Tại Đây", function()
+Button(TabPlayer, "Lock Camera", function()
     State.AppliedPos = Cam.CFrame
     Config.CameraLock = true
     notif("TonKi Hub", "Camera đã lock")
@@ -951,27 +994,30 @@ Button(TabPlayer, "Rejoin", function() pcall(function() TPS:Teleport(game.PlaceI
 -- MISC TAB
 --======================================================================
 Section(TabMisc, "Info")
-Label(TabMisc, "TonKi Hub v2.0")
-Label(TabMisc, "Priority: Sea Event > Set Sail > Boss > Material > LV")
-Label(TabMisc, "Farm Position: Above / Behind / Underground / Direct")
+Label(TabMisc, "TonKi Hub v2.1")
+Label(TabMisc, "Priority: Sea > Sail > Boss > Material > LV")
+Label(TabMisc, "Farm: Above / Behind / Underground / Direct")
 
 Section(TabMisc, "Danger")
-Button(TabMisc, "Reset toàn bộ config", function()
+Button(TabMisc, "Reset config", function()
     pcall(function() delfile(SAVE) end)
-    notif("TonKi Hub", "Đã xoá config. Rejoin để reset.")
+    notif("TonKi Hub", "Đã xoá config")
 end)
 
--- Set default tab
+-- Default tab
 for n, p in pairs(Pages) do
-    p.Visible = (n == "Main")
-    TabBtns[n].BackgroundColor3 = (n=="Main")
+    p.Visible = (n == "Set")
+    TabBtns[n].BackgroundColor3 = (n=="Set")
         and Color3.fromRGB(40,34,18) or Color3.fromRGB(22,22,28)
-    TabBtns[n].TextColor3 = (n=="Main")
+    TabBtns[n].TextColor3 = (n=="Set")
         and Color3.fromRGB(245,205,95) or Color3.fromRGB(200,200,210)
 end
 
+ApplySize(Config.MenuSize)
+ApplyTransparency()
+
 --======================================================================
--- TOGGLE BUTTON: click + drag
+-- TOGGLE BUTTON: tap = open/close, drag = move
 --======================================================================
 local draggingToggle, dragStart, startPos
 ToggleBtn.InputBegan:Connect(function(i)
@@ -1043,7 +1089,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Scan ticker (update mob list + orbit angle)
+-- Scan ticker + orbit
 RunService.Stepped:Connect(function(_, dt)
     if Config.FarmPosMode == "Behind" then
         State.OrbitAngle = (State.OrbitAngle + Config.OrbitSpeed * 60 * dt) % 360
@@ -1066,7 +1112,7 @@ RunService.Stepped:Connect(function()
     if Config.NoClip then
         local c = Char()
         pcall(function()
-            c.Humanoid:ChangeState(11) -- Physics off-ish
+            c.Humanoid:ChangeState(11)
             for _, part in ipairs(c:GetDescendants()) do
                 if part:IsA("BasePart") and part.CanCollide then
                     part.CanCollide = false
@@ -1079,20 +1125,16 @@ end)
 --======================================================================
 -- MAIN FARM LOOPS
 --======================================================================
-
--- Quest confirm helper
 local function QuestConfirmed(questName)
     local plg = LP:FindFirstChild("PlayerGui")
     if not plg then return false end
     local qf = plg:FindFirstChild("QuestFrame") or plg:FindFirstChild("Quests")
-    if not qf then
-        -- fallback: search descendants
-        for _, f in ipairs(plg:GetDescendants()) do
+    if qf then
+        for _, f in ipairs(qf:GetDescendants()) do
             if f:IsA("TextLabel") and f.Text:find(questName) then return true end
         end
-        return false
     end
-    for _, f in ipairs(qf:GetDescendants()) do
+    for _, f in ipairs(plg:GetDescendants()) do
         if f:IsA("TextLabel") and f.Text:find(questName) then return true end
     end
     return false
@@ -1122,7 +1164,6 @@ spawn(function()
                 State.QuestTaken = true
             end
 
-            -- TP to quest area (chỉ TP 1 lần đầu để tránh jitter)
             if Dist(Vector3.new(qx, qy, qz)) > 500 then
                 TP(CFrame.new(qx, qy, qz))
                 task.wait(0.5)
@@ -1136,14 +1177,13 @@ spawn(function()
                 State.AimPosRaw = m.hrp.Position
 
                 RotateWeapon()
-
-                local cf = ComputeFarmCFrame(m.hrp.Position)
-                TP(cf)
+                TP(ComputeFarmCFrame(m.hrp.Position))
 
                 if Dist(m.hrp.Position) <= Config.SkillDistance + 40 then
                     ClickMob()
                     UseSkills()
-                    if Hum() and Hum().Health < Hum().MaxHealth * Config.HealthPercent/100 then
+                    local h = Hum()
+                    if h and h.Health < h.MaxHealth * Config.HealthPercent/100 then
                         Key("R")
                     end
                 end
@@ -1199,7 +1239,7 @@ spawn(function()
     end
 end)
 
--- AUTO MATERIAL (dùng ScanMobs chung)
+-- AUTO MATERIAL
 spawn(function()
     while task.wait(0.5) do
         pcall(function()
@@ -1217,7 +1257,7 @@ spawn(function()
     end
 end)
 
--- AUTO SEA EVENT (highest priority)
+-- AUTO SEA EVENT
 spawn(function()
     while task.wait(1) do
         pcall(function()
@@ -1255,7 +1295,7 @@ spawn(function()
     end
 end)
 
--- AUTO SET SAIL placeholder (giữ chỗ)
+-- AUTO SET SAIL placeholder
 spawn(function()
     while task.wait(2) do
         if Config.AutoSetSail then
@@ -1264,7 +1304,7 @@ spawn(function()
     end
 end)
 
--- AUTO DUNGEON V1: TP tới entrance nếu chưa vào, click chọn map, vào raid thì farm
+-- AUTO DUNGEON V1
 spawn(function()
     while task.wait(0.5) do
         pcall(function()
@@ -1273,7 +1313,6 @@ spawn(function()
             local inRaid = plg and plg:FindFirstChild("DungeonUI")
             if not inRaid then
                 State.InRaid = false
-                -- TP tới entrance
                 local ent = DungeonEntrance()
                 if ent and Dist(ent.Position) > 30 then
                     TP(ent)
@@ -1284,7 +1323,6 @@ spawn(function()
                 return
             end
             State.InRaid = true
-            -- Quét MOB
             local mf = workspace:FindFirstChild("MOB")
             if not mf then return end
             local nearest, nd
@@ -1312,7 +1350,7 @@ spawn(function()
     end
 end)
 
--- AUTO DUNGEON V2: fruit Z có CD + scan all + sword
+-- AUTO DUNGEON V2
 spawn(function()
     while task.wait(0.5) do
         pcall(function()
@@ -1320,6 +1358,12 @@ spawn(function()
             local plg = LP:FindFirstChild("PlayerGui")
             if not (plg and plg:FindFirstChild("DungeonUI")) then
                 State.InRaid = false
+                local ent = DungeonEntrance()
+                if ent and Dist(ent.Position) > 30 then
+                    TP(ent)
+                else
+                    TryEnterDungeon()
+                end
                 return
             end
             State.InRaid = true
@@ -1351,7 +1395,8 @@ spawn(function()
                 if Dist(hrp.Position) < 150 then
                     ClickMob()
                     UseSkills()
-                    if Hum() and Hum().Health < Hum().MaxHealth * Config.HealthPercent/100 then
+                    local h = Hum()
+                    if h and h.Health < h.MaxHealth * Config.HealthPercent/100 then
                         Key("R")
                     end
                 end
