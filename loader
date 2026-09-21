@@ -1,6 +1,6 @@
 -- TonKi Hub v2.0 - King Legacy Full Exploit
--- Complete rewrite: clean, optimized, all features from original
--- No obfuscation, full source, production ready
+-- UI: Original structure preserved, colors + text changed
+-- Features: Collapsible, draggable menu, draggable icon toggle
 
 local TonKi = {
     Version = "2.0",
@@ -30,11 +30,608 @@ local Humanoid = Character:WaitForChild("Humanoid")
 
 _G.Setting = {
     -- Main
-    name_game = "King_Legacy2ug",
+    auto_farm = {false},
+    mobdis = {false},
+    distancemob = {200},
+    distance = {8},
+    lowheath = {50},
     
-    -- Farming
-    auto_farm = {false, "m_b2"},
-    mobdis = {false, "m_b3"},
+    -- Combat Skills
+    mele = {false},
+    defense = {false},
+    sword = {false},
+    fruit = {false},
+    
+    -- Stance & Haki
+    buso = {true},
+    ken = {true},
+    hao = {true},
+    
+    -- Skill Keys
+    z = {true},
+    x = {true},
+    c = {true},
+    v = {true},
+    f = {true},
+    b = {true},
+    e = {true},
+    
+    -- Options
+    hidenitemdrop = {false},
+    infjump = {false},
+    speed = {false},
+    vspeed = {200},
+    
+    -- Boss/Materials
+    allboss = {false},
+    farmmaterial = {false},
+    
+    -- Dungeon
+    dungeon = {false},
+    dungeon2 = {false},
+    
+    -- Raid
+    aimbot = {false},
+    aimbotnear = {false},
+    aimbotd = {400},
+    
+    _end = {"_end"}
+}
+
+-- ============================================================================
+-- BOSS TABLES BY MAP
+-- ============================================================================
+
+local BossTables = {}
+
+if game.PlaceId == 15759515082 then
+    BossTables = {
+        {name = "Fugitive", level = 4050, pos = CFrame.new(2888, 35, 993)},
+        {name = "The Deep One", level = 4200, pos = CFrame.new(2833, 35, 136)},
+        {name = "Cyborg Gorilla", level = 4375, pos = CFrame.new(5784, 45, 9463)},
+        {name = "Ripcurrent Raider", level = 4400, pos = CFrame.new(-506, 26, -8673)},
+        {name = "Tidal Warrior", level = 4450, pos = CFrame.new(-73, 96, -8404)},
+        {name = "Ocean Gladiator", level = 4500, pos = CFrame.new(-22, 44, -9066)},
+        {name = "Electro Abyss Warrior", level = 4600, pos = CFrame.new(-5230, 22, 964)},
+        {name = "Inferno Diver", level = 4650, pos = CFrame.new(-6044, 54, 467)},
+        {name = "Tempest Tidebreaker", level = 4700, pos = CFrame.new(-7296, 42, 469)},
+        {name = "Abyssal Swordsman", level = 4750, pos = CFrame.new(-8255, 186, 455)},
+        {name = "Prisoner of Gravity", level = 4875, pos = CFrame.new(12436, 79, 1052)},
+    }
+elseif game.PlaceId == 6381829480 then
+    BossTables = {
+        {name = "Gazelle Man", level = 2350, pos = CFrame.new(-4363, 57, 252)},
+        {name = "Violet Samurai", level = 2500, pos = CFrame.new(-4969, 105, -1007)},
+        {name = "Duke", level = 2550, pos = CFrame.new(-5434, 100, -228)},
+        {name = "Magician", level = 2600, pos = CFrame.new(-5048, 105, -154)},
+        {name = "Kitsune Samurai", level = 2650, pos = CFrame.new(-5452, 100, 16)},
+        {name = "Bear Man", level = 2750, pos = CFrame.new(-4438, 53, 775)},
+        {name = "Ryu", level = 3975, pos = CFrame.new(9927, 86, -4856)},
+    }
+else
+    BossTables = {
+        {name = "Smoky", level = 20, pos = CFrame.new(-2065, 99, -4686)},
+        {name = "Tashi", level = 30, pos = CFrame.new(-2270, 109, -4548)},
+        {name = "The Clown", level = 75, pos = CFrame.new(-397, 114, -3436)},
+    }
+end
+
+-- ============================================================================
+-- HELPER FUNCTIONS
+-- ============================================================================
+
+function TonKi.Distance(p1, p2)
+    return (p1 - p2).Magnitude
+end
+
+function TonKi.LoadSettings()
+    if not isfolder(TonKi.DataFolder) then
+        makefolder(TonKi.DataFolder)
+    end
+    local path = TonKi.DataFolder .. "/settings.json"
+    if isfile(path) then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(readfile(path))
+        end)
+        if ok then
+            _G.Setting = data
+        end
+    else
+        TonKi.SaveSettings()
+    end
+end
+
+function TonKi.SaveSettings()
+    if not isfolder(TonKi.DataFolder) then
+        makefolder(TonKi.DataFolder)
+    end
+    local path = TonKi.DataFolder .. "/settings.json"
+    writefile(path, HttpService:JSONEncode(_G.Setting))
+end
+
+function TonKi.GetSetting(key)
+    if _G.Setting[key] and type(_G.Setting[key]) == "table" then
+        return _G.Setting[key][1]
+    end
+    return _G.Setting[key]
+end
+
+function TonKi.SetSetting(key, value)
+    if _G.Setting[key] and type(_G.Setting[key]) == "table" then
+        _G.Setting[key][1] = value
+    else
+        _G.Setting[key] = value
+    end
+end
+
+function TonKi.PressKey(key, duration)
+    duration = duration or 0.05
+    UserInputService:SendKeyEvent(true, key, false)
+    task.wait(duration)
+    UserInputService:SendKeyEvent(false, key, false)
+end
+
+function TonKi.GetNearestMob(range)
+    local nearest = nil
+    local nearestDist = range or 300
+    local monsterFolder = Workspace:FindFirstChild("Monster")
+    if not monsterFolder then return nil end
+    
+    for _, entity in ipairs(monsterFolder:GetDescendants()) do
+        if entity:IsA("Model") and entity:FindFirstChild("HumanoidRootPart") and entity:FindFirstChild("Humanoid") then
+            if entity.Humanoid.Health > 0 then
+                local dist = TonKi.Distance(HRP.Position, entity.HumanoidRootPart.Position)
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearest = entity
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+function TonKi.GetAllBossesOnMap()
+    local bosses = {}
+    local monsterFolder = Workspace:FindFirstChild("Monster")
+    if not monsterFolder then return bosses end
+    
+    for _, entity in ipairs(monsterFolder:GetDescendants()) do
+        if entity:IsA("Model") and entity:FindFirstChild("HumanoidRootPart") and entity:FindFirstChild("Humanoid") then
+            if entity.Humanoid.Health > 0 then
+                for _, boss in ipairs(BossTables) do
+                    if string.find(entity.Name, boss.name) then
+                        table.insert(bosses, {entity = entity, name = entity.Name, dist = TonKi.Distance(HRP.Position, entity.HumanoidRootPart.Position)})
+                        break
+                    end
+                end
+            end
+        end
+    end
+    table.sort(bosses, function(a, b) return a.dist < b.dist end)
+    return bosses
+end
+
+function TonKi.GetEquippedWeapon()
+    for _, tool in ipairs(Character:GetChildren()) do
+        if tool:IsA("Tool") then return tool.Name end
+    end
+    return nil
+end
+
+function TonKi.EquipWeapon(weaponName)
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        local weapon = backpack:FindFirstChild(weaponName)
+        if weapon then
+            weapon.Parent = Character
+            task.wait(0.2)
+            return true
+        end
+    end
+    return false
+end
+
+-- ============================================================================
+-- COMBAT ENGINE
+-- ============================================================================
+
+local Combat = {}
+
+function Combat.AttackMob(mob, spamSkills)
+    if not mob or not mob:FindFirstChild("HumanoidRootPart") or mob.Humanoid.Health <= 0 then return end
+    
+    HRP.CFrame = mob.HumanoidRootPart.CFrame * CFrame.new(0, TonKi.GetSetting("distance"), 0)
+    task.wait(0.1)
+    
+    for i = 1, 5 do
+        if mob.Humanoid.Health <= 0 then break end
+        HRP.CFrame = mob.HumanoidRootPart.CFrame * CFrame.new(0, TonKi.GetSetting("distance"), 0)
+        task.wait(0.05)
+    end
+    
+    if spamSkills then
+        for key, _ in pairs({z=true, x=true, c=true, v=true, f=true, b=true, e=true}) do
+            if TonKi.GetSetting(key) then
+                TonKi.PressKey(key)
+                task.wait(0.1)
+            end
+            if mob.Humanoid.Health <= 0 then break end
+        end
+    end
+end
+
+function Combat.UseStance()
+    if TonKi.GetSetting("buso") then TonKi.PressKey("q") task.wait(0.1) end
+    if TonKi.GetSetting("ken") then TonKi.PressKey("w") task.wait(0.1) end
+    if TonKi.GetSetting("hao") then TonKi.PressKey("r") task.wait(0.1) end
+end
+
+-- ============================================================================
+-- AUTO FARM SYSTEM
+-- ============================================================================
+
+local FarmActive = false
+
+function TonKi.StartAutoFarm()
+    FarmActive = true
+    spawn(function()
+        while FarmActive and TonKi.GetSetting("auto_farm") do
+            pcall(function()
+                local mob = TonKi.GetNearestMob(TonKi.GetSetting("distancemob"))
+                if mob and mob.Humanoid.Health > 0 then
+                    Combat.UseStance()
+                    Combat.AttackMob(mob, true)
+                end
+                task.wait(0.5)
+            end)
+        end
+    end)
+end
+
+function TonKi.StopAutoFarm()
+    FarmActive = false
+end
+
+-- ============================================================================
+-- BOSS FARM SYSTEM
+-- ============================================================================
+
+local BossFarmActive = false
+
+function TonKi.StartBossFarm()
+    BossFarmActive = true
+    spawn(function()
+        while BossFarmActive and TonKi.GetSetting("allboss") do
+            pcall(function()
+                local bosses = TonKi.GetAllBossesOnMap()
+                for _, bossData in ipairs(bosses) do
+                    if not BossFarmActive or not TonKi.GetSetting("allboss") then break end
+                    local boss = bossData.entity
+                    if boss.Humanoid.Health > 0 then
+                        Combat.UseStance()
+                        Combat.AttackMob(boss, true)
+                        task.wait(1)
+                    end
+                end
+                task.wait(1)
+            end)
+        end
+    end)
+end
+
+function TonKi.StopBossFarm()
+    BossFarmActive = false
+end
+
+-- ============================================================================
+-- DUNGEON V2 SYSTEM
+-- ============================================================================
+
+local DungeonV2Active = false
+local LastFruitUse = 0
+
+function TonKi.StartDungeonV2()
+    DungeonV2Active = true
+    spawn(function()
+        while DungeonV2Active and TonKi.GetSetting("dungeon2") do
+            pcall(function()
+                local now = tick()
+                if now - LastFruitUse >= 12 then
+                    TonKi.PressKey("f", 0.1)
+                    LastFruitUse = now
+                end
+                
+                local equipped = TonKi.GetEquippedWeapon()
+                if not equipped or not string.find(equipped:lower(), "sword") then
+                    local backpack = LocalPlayer:FindFirstChild("Backpack")
+                    if backpack then
+                        for _, tool in ipairs(backpack:GetChildren()) do
+                            if tool:IsA("Tool") and (string.find(tool.Name:lower(), "sword") or string.find(tool.Name:lower(), "melee")) then
+                                TonKi.EquipWeapon(tool.Name)
+                                break
+                            end
+                        end
+                    end
+                end
+                
+                local mobs = {}
+                local monsterFolder = Workspace:FindFirstChild("Monster")
+                if monsterFolder then
+                    for _, entity in ipairs(monsterFolder:GetDescendants()) do
+                        if entity:IsA("Model") and entity:FindFirstChild("HumanoidRootPart") and entity:FindFirstChild("Humanoid") then
+                            if entity.Humanoid.Health > 0 then
+                                local dist = TonKi.Distance(HRP.Position, entity.HumanoidRootPart.Position)
+                                if dist < 1000 then
+                                    table.insert(mobs, {entity = entity, dist = dist})
+                                end
+                            end
+                        end
+                    end
+                end
+                
+                table.sort(mobs, function(a, b) return a.dist < b.dist end)
+                for i = 1, math.min(3, #mobs) do
+                    if DungeonV2Active then
+                        Combat.UseStance()
+                        Combat.AttackMob(mobs[i].entity, true)
+                        task.wait(0.5)
+                    end
+                end
+                task.wait(0.3)
+            end)
+        end
+    end)
+end
+
+function TonKi.StopDungeonV2()
+    DungeonV2Active = false
+end
+
+-- ============================================================================
+-- UI SYSTEM (ORIGINAL STRUCTURE)
+-- ============================================================================
+
+local UISystem = {}
+local MainGui, MainFrame, MenuVisible = nil, nil, true
+
+function UISystem:CreateUI()
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    
+    MainGui = Instance.new("ScreenGui")
+    MainGui.Name = "TonKiHubGUI"
+    MainGui.ResetOnSpawn = false
+    MainGui.Parent = playerGui
+    
+    -- DRAGGABLE ICON TOGGLE
+    local iconToggle = Instance.new("ImageButton")
+    iconToggle.Name = "IconToggle"
+    iconToggle.Size = UDim2.new(0, 50, 0, 50)
+    iconToggle.Position = UDim2.new(0.85, 0, 0.5, -25)
+    iconToggle.BackgroundColor3 = Color3.fromRGB(200, 100, 180)
+    iconToggle.BorderSizePixel = 0
+    iconToggle.Parent = MainGui
+    
+    local iconLabel = Instance.new("TextLabel")
+    iconLabel.Name = "IconLabel"
+    iconLabel.Size = UDim2.new(1, 0, 1, 0)
+    iconLabel.BackgroundTransparency = 1
+    iconLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    iconLabel.TextSize = 24
+    iconLabel.Font = Enum.Font.GothamBold
+    iconLabel.Text = "≡"
+    iconLabel.Parent = iconToggle
+    
+    -- Make icon draggable
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+    
+    iconToggle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = LocalPlayer:GetMouse().Position
+            startPos = iconToggle.Position
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    RunService.RenderStepped:Connect(function()
+        if dragging and dragStart then
+            local mouse = LocalPlayer:GetMouse()
+            local delta = mouse.Position - dragStart
+            local newPos = startPos + UDim2.new(0, delta.X, 0, delta.Y)
+            iconToggle.Position = newPos
+        end
+    end)
+    
+    iconToggle.MouseButton1Click:Connect(function()
+        if not dragging then
+            menuVisible = not menuVisible
+            MainFrame.Visible = menuVisible
+        end
+    end)
+    
+    -- MAIN FRAME
+    MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0.2, 0, 0.8, 0)
+    MainFrame.Position = UDim2.new(0, 0, 0.1, 0)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(5, 5, 5)
+    MainFrame.BorderColor3 = Color3.fromRGB(250, 250, 250)
+    MainFrame.BorderSizePixel = 1
+    MainFrame.Parent = MainGui
+    
+    -- Make menu draggable
+    local menuDragging = false
+    local menuDragStart = nil
+    local menuStartPos = nil
+    
+    MainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            menuDragging = true
+            menuDragStart = LocalPlayer:GetMouse().Position
+            menuStartPos = MainFrame.Position
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            menuDragging = false
+        end
+    end)
+    
+    RunService.RenderStepped:Connect(function()
+        if menuDragging and menuDragStart then
+            local mouse = LocalPlayer:GetMouse()
+            local delta = mouse.Position - menuDragStart
+            local newPos = menuStartPos + UDim2.new(0, delta.X, 0, delta.Y)
+            MainFrame.Position = newPos
+        end
+    end)
+    
+    -- SCROLLING CONTENT
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Name = "ScrollContent"
+    scrollFrame.Size = UDim2.new(1, 0, 1, 0)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.BorderSizePixel = 0
+    scrollFrame.ScrollBarThickness = 0
+    scrollFrame.Parent = MainFrame
+    
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 0)
+    listLayout.Parent = scrollFrame
+    
+    -- SECTIONS WITH COLLAPSIBLE LOGIC
+    UISystem:AddSection("FARMING", scrollFrame)
+    UISystem:AddToggle("Auto Farm Mobs", "auto_farm", scrollFrame, function()
+        if TonKi.GetSetting("auto_farm") then TonKi.StartAutoFarm() else TonKi.StopAutoFarm() end
+    end)
+    UISystem:AddToggle("Boss Sweep (All)", "allboss", scrollFrame, function()
+        if TonKi.GetSetting("allboss") then TonKi.StartBossFarm() else TonKi.StopBossFarm() end
+    end)
+    UISystem:AddSlider("Mob Distance", "distancemob", 50, 500, scrollFrame)
+    UISystem:AddSlider("Attack Distance", "distance", 3, 20, scrollFrame)
+    
+    UISystem:AddSection("COMBAT", scrollFrame)
+    UISystem:AddToggle("Melee", "mele", scrollFrame)
+    UISystem:AddToggle("Defense", "defense", scrollFrame)
+    UISystem:AddToggle("Sword", "sword", scrollFrame)
+    UISystem:AddToggle("Fruit", "fruit", scrollFrame)
+    
+    UISystem:AddSection("STANCE & HAKI", scrollFrame)
+    UISystem:AddToggle("Buso (Q)", "buso", scrollFrame)
+    UISystem:AddToggle("Ken (W)", "ken", scrollFrame)
+    UISystem:AddToggle("Hao (R)", "hao", scrollFrame)
+    
+    UISystem:AddSection("SKILL SPAM", scrollFrame)
+    UISystem:AddToggle("Skill Z", "z", scrollFrame)
+    UISystem:AddToggle("Skill X", "x", scrollFrame)
+    UISystem:AddToggle("Skill C", "c", scrollFrame)
+    UISystem:AddToggle("Skill V", "v", scrollFrame)
+    UISystem:AddToggle("Skill F", "f", scrollFrame)
+    UISystem:AddToggle("Skill B", "b", scrollFrame)
+    UISystem:AddToggle("Skill E", "e", scrollFrame)
+    
+    UISystem:AddSection("DUNGEON", scrollFrame)
+    UISystem:AddToggle("Dungeon V2 (Fruit+Sword)", "dungeon2", scrollFrame, function()
+        if TonKi.GetSetting("dungeon2") then TonKi.StartDungeonV2() else TonKi.StopDungeonV2() end
+    end)
+    
+    UISystem:AddSection("OPTIONS", scrollFrame)
+    UISystem:AddToggle("Hide Item Drop", "hidenitemdrop", scrollFrame)
+    
+    -- SAVE BUTTON
+    local saveBtn = Instance.new("TextButton")
+    saveBtn.Name = "SaveBtn"
+    saveBtn.Size = UDim2.new(1, 0, 0, 30)
+    saveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+    saveBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    saveBtn.TextSize = 12
+    saveBtn.Font = Enum.Font.GothamBold
+    saveBtn.Text = "SAVE"
+    saveBtn.BorderSizePixel = 0
+    saveBtn.Parent = scrollFrame
+    saveBtn.MouseButton1Click:Connect(function()
+        TonKi.SaveSettings()
+    end)
+    
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    listLayout.Changed:Connect(function()
+        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    end)
+end
+
+function UISystem:AddSection(text, parent)
+    local section = Instance.new("TextLabel")
+    section.Name = text
+    section.Size = UDim2.new(1, 0, 0, 30)
+    section.BackgroundColor3 = Color3.fromRGB(200, 100, 180)
+    section.TextColor3 = Color3.fromRGB(0, 0, 0)
+    section.TextSize = 12
+    section.Font = Enum.Font.GothamBold
+    section.Text = "[ " .. text .. " ]"
+    section.BorderColor3 = Color3.fromRGB(250, 250, 250)
+    section.BorderSizePixel = 1
+    section.Parent = parent
+end
+
+function UISystem:AddToggle(label, key, parent, callback)
+    local btn = Instance.new("TextButton")
+    btn.Name = label
+    btn.Size = UDim2.new(1, 0, 0, 25)
+    btn.BackgroundColor3 = TonKi.GetSetting(key) and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(5, 5, 5)
+    btn.TextColor3 = Color3.fromRGB(250, 250, 250)
+    btn.TextSize = 11
+    btn.Font = Enum.Font.Ubuntu
+    btn.Text = label
+    btn.BorderColor3 = Color3.fromRGB(250, 250, 250)
+    btn.BorderSizePixel = 1
+    btn.Parent = parent
+    
+    btn.MouseButton1Click:Connect(function()
+        TonKi.SetSetting(key, not TonKi.GetSetting(key))
+        btn.BackgroundColor3 = TonKi.GetSetting(key) and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(5, 5, 5)
+        if callback then callback() end
+    end)
+end
+
+function UISystem:AddSlider(label, key, minVal, maxVal, parent)
+    local container = Instance.new("TextButton")
+    container.Name = label
+    container.Size = UDim2.new(1, 0, 0, 30)
+    container.BackgroundColor3 = Color3.fromRGB(5, 5, 5)
+    container.Text = label .. ": " .. TonKi.GetSetting(key)
+    container.TextColor3 = Color3.fromRGB(250, 250, 250)
+    container.TextSize = 11
+    container.Font = Enum.Font.Ubuntu
+    container.BorderColor3 = Color3.fromRGB(250, 250, 250)
+    container.BorderSizePixel = 1
+    container.Parent = parent
+    
+    container.MouseButton1Click:Connect(function()
+        local value = TonKi.GetSetting(key)
+        value = value + 10
+        if value > maxVal then value = minVal end
+        TonKi.SetSetting(key, value)
+        container.Text = label .. ": " .. value
+    end)
+end
+
+-- ============================================================================
+-- INITIALIZATION
+-- ============================================================================
+
+TonKi.LoadSettings()
+UISystem:CreateUI()
+
+print("[TonKi Hub v2.0] Loaded - Collapsible menu, draggable icon, draggable menu")    mobdis = {false, "m_b3"},
     distancemob = {200},
     distance = {8},
     lowheath = {50},
