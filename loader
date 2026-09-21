@@ -1,55 +1,55 @@
 --[[
-    TONKI HUB — PUZZLE DETECTOR v2
-    Chạy TRƯỚC khi nhận quest sea beast, để nó hook sẵn.
-    Khi puzzle hiện ra, script tự nhận diện + log.
+    TONKI — RAW NAMECALL LOGGER
+    Log MỌI namecall trong 5s. Chạy TRƯỚC khi ấn tile.
 ]]
 
-local Players = game:GetService("Players")
-local RS      = game:GetService("ReplicatedStorage")
-local CG      = game:GetService("CoreGui")
-local SG      = game:GetService("StarterGui")
-local LP      = Players.LocalPlayer
+local CG = game:GetService("CoreGui")
+local LP = game:GetService("Players").LocalPlayer
 
-local TraceLog = {}
-local TraceOn  = true
-local KnownGuis = {}
+local Log = {}
+local Capture = false
+local CaptureStart = 0
+local CaptureDur = 8
 
--- Hook namecall — log MỌI FireServer/InvokeServer có number args
 local mt = getrawmetatable(game)
 local oldNC = mt.__namecall
 setreadonly(mt, false)
 mt.__namecall = newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
-    if TraceOn and (method == "InvokeServer" or method == "FireServer") then
-        local numCount = 0
+    if Capture then
+        local method = getnamecallmethod()
+        local args = {...}
+        local full = "?"
+        pcall(function() full = self:GetFullName() end)
+        local argStr = ""
         for _, a in ipairs(args) do
-            if type(a) == "number" then numCount = numCount + 1 end
+            argStr = argStr .. typeof(a) .. ":" .. tostring(a):sub(1,30) .. " "
         end
-        if numCount >= 1 and numCount <= 3 then
-            local full = "?"
-            pcall(function() full = self:GetFullName() end)
-            table.insert(TraceLog, {
-                t = tick(), method = method,
-                remote = tostring(self), full = full, args = args,
-            })
-            if #TraceLog > 1000 then table.remove(TraceLog, 1) end
-        end
+        table.insert(Log, method .. " | " .. full .. " | " .. argStr)
+        if #Log > 3000 then table.remove(Log, 1) end
     end
     return oldNC(self, ...)
 end)
 setreadonly(mt, true)
 
---======================================================================
+-- Hook firesignal cũng để catch
+local oldfiresignal = firesignal
+if oldfiresignal then
+    firesignal = function(...)
+        if Capture then
+            table.insert(Log, "firesignal | " .. tostring(...))
+        end
+        return oldfiresignal(...)
+    end
+end
+
 -- GUI
---======================================================================
 local gui = Instance.new("ScreenGui", CG)
-gui.Name = "TonKiPuzzleDetector"
+gui.Name = "TonKiRawLogger"
 gui.ResetOnSpawn = false
 
 local panel = Instance.new("Frame", gui)
-panel.Size = UDim2.new(0, 300, 0, 420)
-panel.Position = UDim2.new(0, 20, 0.15, 0)
+panel.Size = UDim2.new(0, 340, 0, 460)
+panel.Position = UDim2.new(0, 20, 0.1, 0)
 panel.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
 panel.BorderSizePixel = 0
 panel.Active = true
@@ -62,7 +62,7 @@ local title = Instance.new("TextLabel", panel)
 title.Size = UDim2.new(1, -20, 0, 26)
 title.Position = UDim2.new(0, 10, 0, 6)
 title.BackgroundTransparency = 1
-title.Text = "◈ PUZZLE DETECTOR"
+title.Text = "◈ RAW LOGGER"
 title.TextColor3 = Color3.fromRGB(245, 205, 95)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 13
@@ -81,115 +81,112 @@ local lay = Instance.new("UIListLayout", logBox)
 lay.SortOrder = Enum.SortOrder.LayoutOrder
 lay.Padding = UDim.new(0, 2)
 
-local function addLog(t)
+local lines = {}
+local function addLine(t)
+    table.insert(lines, t)
     local l = Instance.new("TextLabel", logBox)
     l.Size = UDim2.new(1, -6, 0, 14)
     l.BackgroundTransparency = 1
     l.Text = t
     l.TextColor3 = Color3.fromRGB(210, 210, 210)
     l.Font = Enum.Font.Code
-    l.TextSize = 10
+    l.TextSize = 9
     l.TextXAlignment = Enum.TextXAlignment.Left
-    l.TextWrapped = true
+    l.TextWrapped = false
     logBox.CanvasPosition = Vector2.new(0, 1e6)
 end
 
-local function mkBtn(text, y, cb)
-    local b = Instance.new("TextButton", panel)
-    b.Size = UDim2.new(1, -20, 0, 26)
+local function mkBtn(text, y, cb, parent)
+    local b = Instance.new("TextButton", parent or panel)
+    b.Size = UDim2.new(0.47, 0, 0, 26)
     b.Position = UDim2.new(0, 10, 1, y)
     b.BackgroundColor3 = Color3.fromRGB(30, 26, 12)
     b.Text = text
     b.TextColor3 = Color3.fromRGB(245, 205, 95)
     b.Font = Enum.Font.GothamMedium
-    b.TextSize = 11
+    b.TextSize = 10
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
     b.MouseButton1Click:Connect(function() if cb then pcall(cb) end end)
     return b
 end
+local function mkBtnR(text, y, cb, parent)
+    local b = mkBtn(text, y, cb, parent)
+    b.Position = UDim2.new(0.51, 0, 1, y)
+    return b
+end
 
-mkBtn("TOGGLE TRACE", -92, function()
-    TraceOn = not TraceOn
-    addLog("[Trace] " .. (TraceOn and "ON" or "OFF"))
+mkBtn("START CAPTURE (8s)", -92, function()
+    Capture = true
+    CaptureStart = tick()
+    addLine(">>> CAPTURE STARTED. Ấn tile trên puzzle ngay!")
+    task.delay(CaptureDur, function()
+        Capture = false
+        addLine(">>> CAPTURE ENDED")
+    end)
+end)
+
+mkBtnR("STOP", -92, function()
+    Capture = false
+    addLine(">>> STOPPED")
 end)
 
 mkBtn("DUMP + COPY", -62, function()
-    local out = {}
-    for _, e in ipairs(TraceLog) do
-        local s = e.method .. " → " .. e.full .. "  [ "
-        for _, a in ipairs(e.args) do
-            s = s .. typeof(a) .. ":" .. tostring(a) .. " "
-        end
-        s = s .. "]"
-        table.insert(out, s)
-    end
-    local txt = table.concat(out, "\n")
+    local txt = table.concat(lines, "\n")
     if setclipboard then pcall(function() setclipboard(txt) end) end
-    if writefile then pcall(function() writefile("TonKi_PuzzleLog.txt", txt) end) end
-    addLog("[Dump] " .. #out .. " entries copied")
+    if writefile then pcall(function() writefile("TonKi_RawLog.txt", txt) end) end
+    addLine("[Dump] " .. #lines .. " lines copied")
 end)
 
-mkBtn("SCAN GUI MỚI XUẤT HIỆN", -32, function()
+mkBtnR("CLEAR", -62, function()
+    lines = {}
+    for _, c in ipairs(logBox:GetChildren()) do
+        if c:IsA("TextLabel") then c:Destroy() end
+    end
+    Log = {}
+    addLine("[Cleared]")
+end)
+
+mkBtn("SCAN TILE BUTTONS", -32, function()
     local plg = LP:FindFirstChild("PlayerGui")
     if not plg then return end
-    for _, g in ipairs(plg:GetChildren()) do
-        if g:IsA("ScreenGui") and not KnownGuis[g] and g.Enabled then
-            KnownGuis[g] = true
-            local imgbtn, textbtn = 0, 0
-            for _, c in ipairs(g:GetDescendants()) do
-                if c:IsA("ImageButton") then imgbtn = imgbtn + 1 end
-                if c:IsA("TextButton") then textbtn = textbtn + 1 end
-            end
-            addLog(("[GUI] %s Img=%d Txt=%d"):format(g.Name, imgbtn, textbtn))
-        end
-    end
-end)
-
-mkBtn("CLOSE", -2, function() gui:Destroy() end)
-
--- Auto scan mỗi 1s
-spawn(function()
-    while gui.Parent do
-        task.wait(1)
-        local plg = LP:FindFirstChild("PlayerGui")
-        if plg then
-            for _, g in ipairs(plg:GetChildren()) do
-                if g:IsA("ScreenGui") and not KnownGuis[g] and g.Enabled then
-                    KnownGuis[g] = true
-                    local imgbtn = 0
-                    for _, c in ipairs(g:GetDescendants()) do
-                        if c:IsA("ImageButton") then imgbtn = imgbtn + 1 end
-                    end
-                    if imgbtn >= 12 then
-                        addLog(("[PUZZLE?] %s  Img=%d"):format(g.Name, imgbtn))
-                    end
+    -- tìm trong MainGui
+    local mg = plg:FindFirstChild("MainGui")
+    if not mg then addLine("MainGui not found"); return end
+    local count = 0
+    for _, g in ipairs(mg:GetDescendants()) do
+        if g:IsA("ImageButton") then
+            -- log connections
+            for _, sig in ipairs({"MouseButton1Click","MouseButton1Down","Activated","InputBegan","TouchTap"}) do
+                local ok, conns = pcall(getconnections, g[sig])
+                if ok and conns and #conns > 0 then
+                    addLine(("[CONN] %s | %s | %d"):format(g:GetFullName(), sig, #conns))
+                    count = count + 1
                 end
             end
         end
     end
+    addLine("[Scan] " .. count .. " tile connections found")
 end)
 
--- Auto log trace
+mkBtnR("CLOSE", -32, function() gui:Destroy() end)
+
+-- realtime sync
 spawn(function()
     local last = 0
     while gui.Parent do
-        task.wait(0.3)
-        if #TraceLog > last then
-            for i = last + 1, #TraceLog do
-                local e = TraceLog[i]
-                local argS = ""
-                for _, a in ipairs(e.args) do
-                    argS = argS .. tostring(a) .. " "
-                end
-                addLog(e.remote .. "  [" .. argS .. "]")
+        task.wait(0.25)
+        if #Log > last then
+            for i = last + 1, #Log do
+                addLine(Log[i])
             end
-            last = #TraceLog
+            last = #Log
         end
     end
 end)
 
 pcall(function()
-    SG:SetCore("SendNotification", {Title="TonKi", Text="Detector chạy. Nhận quest sea beast rồi ấn tile.", Duration=4})
+    game:GetService("StarterGui"):SetCore("SendNotification",
+        {Title="TonKi", Text="Bấm START CAPTURE rồi ấn tile.", Duration=4})
 end)
 
-return TraceLog
+return Log
