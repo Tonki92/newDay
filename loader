@@ -1,4 +1,4 @@
---[[ TONKI — ADMIN BUTTON FINDER v1 ]]
+--[[ TONKI — EXECUTE BUTTON FINDER ]]
 local CG = game:GetService("CoreGui")
 local LP = game:GetService("Players").LocalPlayer
 local SG = game:GetService("StarterGui")
@@ -6,82 +6,105 @@ local SG = game:GetService("StarterGui")
 local Log = {}
 local function add(t) table.insert(Log, t); print("[TonKi]", t) end
 
--- tìm nút admin
-local adminNames = {"sbpuzzle","race","tp","rr","spawnboss","gat","rs","level","exp","awakeall","dfc","df"}
-local found = {}
+-- Tìm CommandFrame
 local plg = LP:FindFirstChild("PlayerGui")
-if plg then
-    for _, g in ipairs(plg:GetDescendants()) do
-        if g:IsA("TextButton") and g.Name ~= "Claim" then
-            for _, n in ipairs(adminNames) do
-                if g.Name == n or g.Name:lower() == n:lower() then
-                    table.insert(found, g)
-                    break
+local mainGui = plg and plg:FindFirstChild("MainGui")
+local starter = mainGui and mainGui:FindFirstChild("StarterFrame")
+local cmdFrame = starter and starter:FindFirstChild("CommandFrame")
+
+if not cmdFrame then add("[X] không tìm thấy CommandFrame") return end
+add("[✓] CommandFrame: " .. cmdFrame:GetFullName())
+
+-- Dump toàn bộ cây CommandFrame (3 tầng)
+local function dump(obj, depth)
+    if depth > 4 then return end
+    for _, c in ipairs(obj:GetChildren()) do
+        local ind = string.rep("  ", depth)
+        local extra = ""
+        if c:IsA("TextButton") then extra = " Txt=" .. tostring(c.Text) end
+        if c:IsA("TextBox") then extra = " TB=" .. tostring(c.Text) .. " ph=" .. tostring(c.PlaceholderText) end
+        add(ind .. c.ClassName .. " | " .. c.Name .. extra)
+        dump(c, depth + 1)
+    end
+end
+dump(cmdFrame, 0)
+
+-- Tìm nút Execute/Run/Enter
+add("\n=== TÌM NÚT EXECUTE ===")
+local keywords = {"execute","exec","run","enter","send","submit","confirm","ok","go","apply"}
+for _, g in ipairs(cmdFrame:GetDescendants()) do
+    if g:IsA("TextButton") then
+        local n = g.Name:lower()
+        local t = g.Text:lower()
+        for _, kw in ipairs(keywords) do
+            if n:find(kw) or t:find(kw) then
+                add("→ " .. g:GetFullName() .. " | Text='" .. g.Text .. "'")
+
+                -- dump connection + upvalues
+                local ok, conns = pcall(getconnections, g.MouseButton1Click)
+                if ok and conns then
+                    for i, c in ipairs(conns) do
+                        add("   conn[" .. i .. "] " .. tostring(c.Function))
+                        local fn = c.Function
+                        if fn then
+                            for j = 1, 20 do
+                                local ok2, uv = pcall(getupvalue, fn, j)
+                                if not ok2 or uv == nil then break end
+                                local ty = typeof(uv)
+                                local txt = tostring(uv)
+                                if ty == "Instance" then
+                                    pcall(function() txt = uv:GetFullName() end)
+                                elseif ty == "table" then
+                                    local parts = {}
+                                    for k, v in pairs(uv) do
+                                        if type(k) == "string" and typeof(v) == "Instance" then
+                                            local f = "?"
+                                            pcall(function() f = v:GetFullName() end)
+                                            table.insert(parts, k .. "=" .. f)
+                                        end
+                                    end
+                                    txt = "{" .. table.concat(parts, ",") .. "}"
+                                end
+                                add("      UV[" .. j .. "] " .. ty .. " = " .. txt)
+                            end
+                        end
+                    end
                 end
+                break
             end
         end
     end
 end
-add("[Found] " .. #found .. " admin buttons")
 
-for _, btn in ipairs(found) do
-    add("── " .. btn:GetFullName())
-    local conns
-    pcall(function() conns = getconnections(btn.MouseButton1Click) end)
-    if conns then
-        for i, c in ipairs(conns) do
-            add("   conn[" .. i .. "] fn=" .. tostring(c.Function))
-            local fn = c.Function
-            if fn then
-                for j = 1, 20 do
-                    local ok, uv = pcall(getupvalue, fn, j)
-                    if not ok or uv == nil then break end
-                    local ty = typeof(uv)
-                    local txt = tostring(uv)
-                    if (ty == "Instance") then
-                        pcall(function() txt = uv:GetFullName() end)
-                    elseif ty == "table" then
-                        local parts = {}
-                        for k, v in pairs(uv) do
-                            if type(k) == "string" and typeof(v) == "Instance" then
-                                local fn2 = "?"
-                                pcall(function() fn2 = v:GetFullName() end)
-                                table.insert(parts, k .. "=" .. fn2)
-                            end
-                        end
-                        txt = "{" .. table.concat(parts, ",") .. "}"
-                    end
-                    add("      UV[" .. j .. "] " .. ty .. " = " .. txt)
-                end
-            end
+-- Fallback: tìm MỌI button trong StarterFrame, không filter
+add("\n=== TẤT CẢ BUTTON TRONG StarterFrame ===")
+if starter then
+    for _, g in ipairs(starter:GetDescendants()) do
+        if g:IsA("TextButton") and g.Visible then
+            add("• " .. g:GetFullName() .. " | '" .. g.Text .. "'")
         end
-    else
-        add("   (không đọc được connections)")
     end
 end
 
 -- GUI dump
 local gui = Instance.new("ScreenGui", CG)
-gui.Name = "TonKiAdminFinder"
-gui.ResetOnSpawn = false
+gui.Name = "TonKiExecFinder"; gui.ResetOnSpawn = false
 local fr = Instance.new("Frame", gui)
-fr.Size = UDim2.new(1,0,1,0)
-fr.BackgroundColor3 = Color3.fromRGB(8,8,10)
-fr.BorderSizePixel = 0
+fr.Size = UDim2.new(1,0,1,0); fr.BackgroundColor3 = Color3.fromRGB(8,8,10); fr.BorderSizePixel=0
 local close = Instance.new("TextButton", fr)
-close.Size = UDim2.new(0,100,0,32); close.Position = UDim2.new(1,-110,0,10)
-close.BackgroundColor3 = Color3.fromRGB(180,40,40); close.Text="ĐÓNG"
+close.Size=UDim2.new(0,100,0,32); close.Position=UDim2.new(1,-110,0,10)
+close.BackgroundColor3=Color3.fromRGB(180,40,40); close.Text="ĐÓNG"
 close.TextColor3=Color3.new(1,1,1); close.Font=Enum.Font.GothamBold; close.TextSize=14
 close.MouseButton1Click:Connect(function() gui:Destroy() end)
 
 local copy = Instance.new("TextButton", fr)
-copy.Size = UDim2.new(0,120,0,32); copy.Position = UDim2.new(1,-240,0,10)
+copy.Size=UDim2.new(0,120,0,32); copy.Position=UDim2.new(1,-240,0,10)
 copy.BackgroundColor3=Color3.fromRGB(40,140,60); copy.Text="COPY"
 copy.TextColor3=Color3.new(1,1,1); copy.Font=Enum.Font.GothamBold; copy.TextSize=14
-copy.Parent = fr
+copy.Parent=fr
 
 local sc = Instance.new("ScrollingFrame", fr)
-sc.Size = UDim2.new(1,-20,1,-60); sc.Position = UDim2.new(0,10,0,50)
+sc.Size=UDim2.new(1,-20,1,-60); sc.Position=UDim2.new(0,10,0,50)
 sc.BackgroundColor3=Color3.fromRGB(0,0,0); sc.BorderSizePixel=0
 sc.ScrollBarThickness=8; sc.AutomaticCanvasSize=Enum.AutomaticSize.Y
 sc.CanvasSize=UDim2.new(0,0,0,0)
@@ -102,9 +125,8 @@ copy.MouseButton1Click:Connect(function()
     if setclipboard then pcall(function() setclipboard(txt) end) end
     copy.Text="DONE"; task.wait(1); copy.Text="COPY"
 end)
-
 if setclipboard then pcall(function() setclipboard(txt) end) end
-if writefile then pcall(function() writefile("TonKi_AdminDump.txt", txt) end) end
+if writefile then pcall(function() writefile("TonKi_ExecDump.txt", txt) end) end
 
-pcall(function() SG:SetCore("SendNotification", {Title="TonKi", Text="Đã dump admin buttons. Gửi log mình.", Duration=5}) end)
+pcall(function() SG:SetCore("SendNotification", {Title="TonKi", Text="Đã dump Execute button. Gửi log.", Duration=5}) end)
 return txt
